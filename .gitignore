@@ -17,3 +17,7 @@ package-lock.json
 # Windows
 ehthumbs.db
 Thumbs.db
+
+# Local code indexes
+/tags
+/SYMBOL_INDEX.json
