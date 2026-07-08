@@ -1,5 +1,6 @@
 import { build } from "vite";
 import { join, dirname } from "path";
+import { pathToFileURL } from "url";
 import { existsSync, readdirSync } from "fs";
 import { Target, viteStaticCopy } from "vite-plugin-static-copy";
 import generateImportMap from "./vite-plugin-importmap";
@@ -222,6 +223,6 @@ interface IndividualContent {
 	moderned: boolean;
 }
 
-if (import.meta.main) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	await main();
 }
