@@ -3,6 +3,44 @@ import { app, Menu, dialog, getCurrentWindow } from "@electron/remote";
 import path from "path";
 const thisWindow = getCurrentWindow();
 
+console.info("[electron:preload] loaded", {
+	href: location.href,
+	readyState: document.readyState,
+	userAgent: navigator.userAgent,
+});
+
+window.addEventListener(
+	"error",
+	event => {
+		if (event instanceof ErrorEvent) {
+			console.error("[electron:preload] window error", {
+				message: event.message,
+				filename: event.filename,
+				line: event.lineno,
+				column: event.colno,
+				error: event.error,
+			});
+			return;
+		}
+
+		const target = event.target as HTMLScriptElement | HTMLLinkElement | null;
+		console.error("[electron:preload] resource error", target?.src || target?.href || target);
+	},
+	true
+);
+
+window.addEventListener("unhandledrejection", event => {
+	console.error("[electron:preload] unhandled rejection", event.reason);
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+	console.info("[electron:preload] DOM ready", {
+		href: location.href,
+		scripts: document.scripts.length,
+		serviceWorkerController: navigator.serviceWorker?.controller?.scriptURL ?? null,
+	});
+});
+
 const Menus: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] = [
 	{
 		label: "操作",
@@ -83,8 +121,7 @@ const Menus: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] = [
 				label: "版权声明",
 				click: () => {
 					dialog.showMessageBoxSync(thisWindow, {
-						message:
-							"【无名杀】属于个人（水乎）开发项目且【完全免费】。如非法倒卖用于牟利将承担法律责任 开发团队将追究到底",
+						message: "【无名杀】属于个人（水乎）开发项目且【完全免费】。如非法倒卖用于牟利将承担法律责任 开发团队将追究到底",
 						type: "info",
 						title: "版权声明",
 						icon: path.join(app.getAppPath(), "app", "noname.ico"),

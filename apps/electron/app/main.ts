@@ -6,9 +6,10 @@ import remote from "@electron/remote/main/index.js";
 import createApp from "@noname/fs";
 remote.initialize();
 const dirname = path.join(import.meta.dirname, "../");
+const publicDir = import.meta.env.DEV ? dirname : path.join(dirname, "public");
 createApp({
 	port: 8089,
-	dirname,
+	dirname: publicDir,
 	server: true,
 });
 
