@@ -8,7 +8,9 @@
     "mobile"
   ],
   "scripts": {
-    "sync": "cap sync & tsx afterSync.ts",
+    "sync": "cap sync android && tsx afterSync.ts",
+    "build:apk": "tsx scripts/buildAndroid.ts apk",
+    "build:aab": "tsx scripts/buildAndroid.ts aab",
     "lint": "pnpm eslint src/**"
   },
   "dependencies": {
