@@ -3,6 +3,9 @@ output
 node_modules
 package-lock.json
 
+# Build outputs
+/lan-ai-server/public/
+
 # IDE
 .idea/
 .vscode/

@@ -1,11 +1,43 @@
 # 无名杀局域网开服说明
 
-这个目录是给局域网游玩准备的开服目录。
+这个目录是给局域网游玩准备的开服工具目录。仓库内以根目录 `dist/` 作为唯一构建产物源，本目录默认只放开服和打包脚本。
 
-- `public/`：已经构建好的网页游戏产物
-- `server.mjs`：局域网网页服务，同时提供游戏需要的文件接口
+注意：
+
+- `server.mjs` 是需要纳入版本管理的开服工具源码。
+- 本仓库内开服默认直接读取根目录 `dist/`，不需要再维护一份 `lan-ai-server/public/`。
+- `public/` 只作为最终 Windows 分发包里的自包含网页产物目录，或旧流程遗留目录；不应直接手工修改，也不纳入 Git 跟踪。
+- 需要更新开服内容时，应先修改源码并重新构建，让根目录 `dist/` 保持最新。
+
+- `../dist/`：仓库内唯一构建产物源
+- `server.mjs`：局域网网页服务，同时提供游戏需要的文件接口；在仓库内默认服务 `../dist/`
+- `package-windows.mjs`：基于 `../dist/` 生成 Windows 可双击运行 ZIP 包的脚本
 - 默认网页端口：`8090`
 - 多人联机大厅端口：`8082`
+
+## Windows 分发包
+
+需要把当前 `dist/` 打成可发给 Windows 朋友的双击运行包时，在本目录执行：
+
+```bash
+node package-windows.mjs
+```
+
+脚本会生成：
+
+```text
+output/noname-时间戳.zip
+```
+
+`output/` 里只保留最新一个 `noname-*.zip`。ZIP 解压后，Windows 用户双击 `start-noname.bat` 即可启动本地网页服务并自动打开浏览器。
+
+脚本会把 Windows 版 `node.exe` 放进包里。查找顺序：
+
+1. 环境变量 `NONAME_WINDOWS_NODE_EXE` 或 `NODE_WIN_EXE` 指向的 `node.exe`
+2. 本目录下的 `node/node.exe`
+3. 本目录下的 `runtime/node.exe`
+4. 本目录下的 `.runtime/node.exe`
+5. 如果以上都没有，则自动下载当前 Node 版本对应的官方 Windows x64 便携包并抽取 `node.exe`
 
 ## 一、单人玩 AI
 
@@ -179,7 +211,7 @@ ifconfig
 
 如果页面提示 `game.checkFile is not a function`：
 
-- 不要用普通静态服务器开 `public/`
+- 不要绕过 `server.mjs` 直接用普通静态服务器开 `dist/` 或 `public/`
 - 必须用本目录的 `server.mjs` 开服
 - 刷新页面，必要时强刷：`Ctrl + F5`
 
@@ -187,8 +219,8 @@ ifconfig
 
 当前网页已经带轻量 PWA 配置：
 
-- `public/manifest.webmanifest`
-- `public/image/app-icon.svg`
+- `../dist/manifest.webmanifest`
+- `../dist/image/app-icon.svg`
 - 首页的 PWA meta 标签
 
 在手机或电脑浏览器打开网页后，可以在浏览器菜单里选择“添加到主屏幕”“安装应用”或类似入口。
@@ -202,10 +234,11 @@ ifconfig
 
 ## 八、更新开服产物
 
-如果仓库代码更新后要重新生成这个目录里的网页产物：
+如果仓库代码更新后要重新生成开服使用的网页产物：
 
 ```bash
 cd /home/fengxuwen/noname
 pnpm build
-cp -a dist/. lan-ai-server/public/.
 ```
+
+`lan-ai-server/server.mjs` 在仓库内会直接服务新的 `dist/`。不需要再把 `dist/` 复制到 `lan-ai-server/public/`。

@@ -1,11 +1,17 @@
 import { createServer } from "node:http";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicDir = path.join(__dirname, "public");
+const repoDistDir = path.resolve(__dirname, "..", "dist");
+const bundledPublicDir = path.join(__dirname, "public");
+const publicDir = process.env.PUBLIC_DIR
+	? path.resolve(process.env.PUBLIC_DIR)
+	: existsSync(repoDistDir)
+		? repoDistDir
+		: bundledPublicDir;
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 8090);
 
