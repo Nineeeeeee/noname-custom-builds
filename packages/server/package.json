@@ -6,6 +6,9 @@
     "license": "ISC",
     "author": "",
     "type": "module",
+    "engines": {
+        "node": ">=20"
+    },
     "main": "dist/index.cjs",
     "module": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -15,6 +18,7 @@
     "scripts": {
         "build": "tsup",
         "dev": "tsx src/cli.ts",
+        "start": "node dist/cli.cjs",
         "lint": "pnpm eslint src/**"
     },
     "dependencies": {

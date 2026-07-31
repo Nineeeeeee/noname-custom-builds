@@ -1,4 +1,6 @@
-FROM node:lts-slim AS base
+# syntax=docker/dockerfile:1
+
+FROM node:24-bookworm-slim AS base
 
 ENV PNPM_HOME="/pnpm" \
     PATH="$PNPM_HOME:$PATH"
@@ -8,31 +10,36 @@ RUN set -eux \
     && corepack prepare pnpm@10 --activate \
     && pnpm --version
 
-COPY . /app
 WORKDIR /app
 
 FROM base AS prod-deps
+COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     set -eux \
     && pnpm install --prod --frozen-lockfile --config.confirm-modules-purge=false
 
 FROM base AS build
+COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     set -eux \
-    && pnpm install --frozen-lockfile --config.confirm-modules-purge=false \
-    && pnpm run build
+    && pnpm install --frozen-lockfile --config.confirm-modules-purge=false
+COPY src ./src
+COPY tsup.config.ts ./
+RUN pnpm run build
 
-FROM node:lts-slim
-COPY --from=prod-deps /app/node_modules /app/node_modules
-COPY --from=build /app/dist /app/dist
+FROM node:24-bookworm-slim AS runtime
 
-RUN set -eux \
-    && groupadd --system --gid 999 nonroot \
-    && useradd --system --gid 999 --uid 999 -m appuser \
-    && chown -R appuser:nonroot /app/
+ENV NODE_ENV="production" \
+    PORT="8082"
 
-USER appuser
-EXPOSE 8082
 WORKDIR /app
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
 
-CMD ["node", "dist/cli.js"]
+USER node
+EXPOSE 8082
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["node", "-e", "const net=require('node:net');const port=Number(process.env.PORT||8082);const socket=net.connect({host:'127.0.0.1',port},()=>{socket.end();process.exit(0)});socket.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000).unref()"]
+
+CMD ["node", "dist/cli.cjs"]

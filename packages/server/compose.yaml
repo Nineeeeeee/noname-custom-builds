@@ -1,0 +1,19 @@
+services:
+  lobby:
+    build:
+      context: .
+    image: noname-lobby:1.11.4.1
+    container_name: noname-lobby
+    restart: unless-stopped
+    init: true
+    environment:
+      PORT: "8082"
+    ports:
+      - "8082:8082"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
