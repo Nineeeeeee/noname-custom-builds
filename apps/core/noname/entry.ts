@@ -15,6 +15,10 @@ import "vue/dist/vue.esm-browser.js";
 			// Electron平台
 			if (typeof window.require === "function") {
 				return import("./init/node.js");
+			} else if ("Capacitor" in window) {
+				// Capacitor 不会注入 Cordova 的 deviceready 和文件系统接口，
+				// 使用独立适配，避免被误判为需要 /checkFile 接口的普通浏览器。
+				return import("./init/capacitor.js");
 			} else {
 				// 仅在“确实是移动端客户端/cordova环境”时才走 cordova 分支；
 				// 否则（如 macOS 桌面 Safari/Chrome、普通手机浏览器）应走 browser 分支，避免请求 /cordova.js 并卡死在 deviceready。
