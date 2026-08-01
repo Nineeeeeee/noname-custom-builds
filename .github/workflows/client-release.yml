@@ -215,15 +215,19 @@ jobs:
               env:
                   TAG: ${{ needs.prepare-release.outputs.tag }}
               run: |
+                  DEPLOY_DIR="$RUNNER_TEMP/noname-lobby-deploy"
                   PACKAGE_DIR="$RUNNER_TEMP/noname-lobby-node"
-                  LINKED_MODULES="$RUNNER_TEMP/noname-lobby-linked-modules"
 
                   pnpm --dir packages/server build
-                  pnpm --filter @noname/server deploy --prod "$PACKAGE_DIR"
+                  pnpm --filter @noname/server deploy --prod "$DEPLOY_DIR"
 
-                  mv "$PACKAGE_DIR/node_modules" "$LINKED_MODULES"
-                  mkdir "$PACKAGE_DIR/node_modules"
-                  cp -RL "$LINKED_MODULES/." "$PACKAGE_DIR/node_modules/"
+                  mkdir -p "$PACKAGE_DIR/node_modules"
+                  cp "$DEPLOY_DIR/package.json" "$PACKAGE_DIR/"
+                  cp "$DEPLOY_DIR/README.md" "$PACKAGE_DIR/"
+                  cp "$DEPLOY_DIR/start-lobby.cmd" "$PACKAGE_DIR/"
+                  cp "$DEPLOY_DIR/start-lobby.sh" "$PACKAGE_DIR/"
+                  cp -R "$DEPLOY_DIR/dist" "$PACKAGE_DIR/"
+                  cp -RL "$DEPLOY_DIR/node_modules/ws" "$PACKAGE_DIR/node_modules/ws"
 
                   if find "$PACKAGE_DIR" -type l -print -quit | grep -q .; then
                     echo "Portable Node.js package still contains symbolic links." >&2
