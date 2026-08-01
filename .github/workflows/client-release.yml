@@ -1,0 +1,234 @@
+name: Build Windows and Android Release
+
+run-name: Client release from ${{ github.ref_name }} by ${{ github.actor }}
+
+on:
+    workflow_dispatch:
+        inputs:
+            release_tag:
+                description: "Optional release tag (leave empty to generate one automatically)"
+                required: false
+                type: string
+
+permissions:
+    contents: write
+
+concurrency:
+    group: client-release-${{ github.run_id }}
+    cancel-in-progress: false
+
+jobs:
+    prepare-release:
+        name: Prepare draft release
+        runs-on: ubuntu-latest
+        outputs:
+            tag: ${{ steps.metadata.outputs.tag }}
+            version: ${{ steps.metadata.outputs.version }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Resolve release metadata
+              id: metadata
+              shell: bash
+              env:
+                  INPUT_TAG: ${{ inputs.release_tag }}
+              run: |
+                  VERSION="$(jq -r '.version' apps/core/package.json)"
+                  TAG="$INPUT_TAG"
+                  if [[ -z "$TAG" ]]; then
+                    TAG="v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+                  fi
+
+                  if [[ ! "$TAG" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+                    echo "Invalid release tag: $TAG" >&2
+                    echo "Use a tag such as v1.11.4.1-custom.1." >&2
+                    exit 1
+                  fi
+
+                  echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+            - name: Create draft release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ steps.metadata.outputs.tag }}
+                  VERSION: ${{ steps.metadata.outputs.version }}
+              run: |
+                  if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                    echo "Release or tag $TAG already exists. Choose another tag." >&2
+                    exit 1
+                  fi
+
+                  gh release create "$TAG" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --target "$GITHUB_SHA" \
+                    --title "无名杀 ${TAG}" \
+                    --notes "基于 ${GITHUB_SHA} 构建的无名杀 ${VERSION} 客户端。Windows 为 NSIS 安装器；Android 为 release APK，使用测试签名，适合直接安装和联机使用。" \
+                    --draft
+
+    build-windows:
+        name: Build Windows EXE
+        needs: prepare-release
+        runs-on: windows-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v5
+              with:
+                  version: 9
+                  run_install: false
+
+            - name: Install Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build Windows installer
+              shell: bash
+              env:
+                  TAG: ${{ needs.prepare-release.outputs.tag }}
+              run: |
+                  pnpm build
+                  pnpm -F @noname/electron build:win
+
+                  EXE="$(find output -maxdepth 1 -type f -name '*.exe' -print -quit)"
+                  if [[ -z "$EXE" ]]; then
+                    echo "Windows installer was not created." >&2
+                    exit 1
+                  fi
+
+                  mkdir -p release
+                  cp "$EXE" "release/noname-windows-${TAG#v}.exe"
+
+            - name: Upload Windows installer
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ needs.prepare-release.outputs.tag }}
+              run: |
+                  gh release upload "$TAG" \
+                    "release/noname-windows-${TAG#v}.exe" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --clobber
+
+    build-android:
+        name: Build Android APK
+        needs: prepare-release
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v5
+              with:
+                  version: 9
+                  run_install: false
+
+            - name: Install Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: pnpm
+
+            - name: Install Java
+              uses: actions/setup-java@v5
+              with:
+                  distribution: temurin
+                  java-version: "21"
+                  cache: gradle
+
+            - name: Install Android SDK
+              uses: android-actions/setup-android@v3
+
+            - name: Install Android API 36
+              shell: bash
+              run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build Android release APK
+              shell: bash
+              env:
+                  TAG: ${{ needs.prepare-release.outputs.tag }}
+              run: |
+                  pnpm --dir apps/mobile build:apk
+
+                  APK="apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
+                  if [[ ! -f "$APK" ]]; then
+                    echo "Android APK was not created." >&2
+                    exit 1
+                  fi
+
+                  mkdir -p release
+                  cp "$APK" "release/noname-android-${TAG#v}.apk"
+
+            - name: Upload Android APK
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ needs.prepare-release.outputs.tag }}
+              run: |
+                  gh release upload "$TAG" \
+                    "release/noname-android-${TAG#v}.apk" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --clobber
+
+    publish-release:
+        name: Publish release
+        needs:
+            - prepare-release
+            - build-windows
+            - build-android
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Publish GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ needs.prepare-release.outputs.tag }}
+              run: |
+                  gh release edit "$TAG" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --draft=false \
+                    --latest
+
+    cleanup-failed-release:
+        name: Clean up failed release
+        if: >-
+            ${{
+              always() &&
+              needs.prepare-release.result == 'success' &&
+              (
+                needs.build-windows.result != 'success' ||
+                needs.build-android.result != 'success'
+              )
+            }}
+        needs:
+            - prepare-release
+            - build-windows
+            - build-android
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Delete failed draft release and tag
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ needs.prepare-release.outputs.tag }}
+              run: |
+                  gh release delete "$TAG" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --yes \
+                    --cleanup-tag
