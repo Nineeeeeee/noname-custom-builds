@@ -2,8 +2,8 @@
 
 FROM node:24-bookworm-slim AS base
 
-ENV PNPM_HOME="/pnpm" \
-    PATH="$PNPM_HOME:$PATH"
+ENV PNPM_HOME="/pnpm"
+ENV PATH="/pnpm:$PATH"
 
 RUN set -eux \
     && corepack enable \

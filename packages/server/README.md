@@ -4,6 +4,41 @@
 客户端。玩家仍由其中一人的客户端创建房间并担任房主；大厅只负责房间发现和
 消息转发。
 
+## Node.js 分发包
+
+GitHub Release 中的 `noname-lobby-node-*.zip` 已包含编译结果和生产依赖。
+服务器安装 Node.js 20 或更高版本后，解压即可运行，不需要再次执行
+`pnpm install`：
+
+```bash
+# Linux / macOS
+chmod +x start-lobby.sh
+./start-lobby.sh
+
+# 或在任意平台直接使用 Node.js
+node dist/cli.cjs
+```
+
+Windows 可双击 `start-lobby.cmd`。默认监听 TCP `8082`，也可通过环境变量或
+命令行参数修改端口：
+
+```bash
+PORT=9000 ./start-lobby.sh
+node dist/cli.cjs --port 9000
+```
+
+## Docker 镜像分发包
+
+GitHub Release 中的 `noname-lobby-docker-linux-amd64-*.tar` 是已经构建好的
+Linux AMD64 Docker 镜像，无需源码即可导入：
+
+```bash
+docker load -i noname-lobby-docker-linux-amd64-版本号.tar
+```
+
+`docker load` 完成后会显示实际镜像标签。使用该标签按照下文的安全参数启动
+容器即可。
+
 ## 本机构建并运行
 
 ```bash

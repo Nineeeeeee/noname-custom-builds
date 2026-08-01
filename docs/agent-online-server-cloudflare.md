@@ -31,6 +31,17 @@ docker save -o noname-lobby-1.11.4.1.tar noname-lobby:1.11.4.1
 正式分发的镜像使用 Node 24、非 root 用户、只读文件系统、健康检查和
 `restart: unless-stopped`。
 
+个人仓库的 `Build Windows and Android Release` GitHub Actions 工作流会在
+同一个 Release 中额外生成两种大厅包：
+
+- `noname-lobby-docker-linux-amd64-*.tar`：已构建的 Docker 镜像，使用
+  `docker load -i` 导入。
+- `noname-lobby-node-*.zip`：包含编译结果和生产依赖，Node.js 20 或更高版本
+  解压后可直接运行，无需再次安装依赖。
+
+Node 分发包的启动方式和 Docker tar 的导入方式见
+`packages/server/README.md`。
+
 ## Ubuntu 公网服务器
 
 服务器需要同时满足：
