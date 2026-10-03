@@ -24,3 +24,6 @@ Thumbs.db
 # Local code indexes
 /tags
 /SYMBOL_INDEX.json
+
+# Skill for private use
+.agents/skills/*-selfuse

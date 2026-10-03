@@ -49,6 +49,7 @@ const characters = {
 		hp: 3,
 		skills: ["sbhuanshi", "sbhongyuan", "sbmingzhe"],
 		names: "诸葛|瑾",
+		clans: ["琅琊诸葛氏"],
 	},
 	sb_jiaxu: {
 		sex: "male",
@@ -80,7 +81,6 @@ const characters = {
 		group: "wei",
 		hp: 4,
 		maxHp: 4,
-		hujia: 1,
 		skills: ["sbganglie", "sbqingjian"],
 		names: "夏侯|惇",
 	},
@@ -116,6 +116,7 @@ const characters = {
 		hp: 3,
 		skills: ["sbhuoji", "sbkanpo"],
 		names: "诸葛|亮",
+		clans: ["琅琊诸葛氏"],
 	},
 	sb_zhanghe: {
 		sex: "male",

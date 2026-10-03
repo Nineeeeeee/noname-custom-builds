@@ -8,16 +8,18 @@
     "mobile"
   ],
   "scripts": {
-    "sync": "cap sync android && tsx afterSync.ts",
+    "sync": "tsx afterSync.ts",
     "build:apk": "tsx scripts/buildAndroid.ts apk",
     "build:aab": "tsx scripts/buildAndroid.ts aab",
+    "build:android": "tsx buildAndroid.ts",
     "lint": "pnpm eslint src/**"
   },
   "dependencies": {
     "@capacitor/android": "^8.1.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/core": "^8.1.0",
-    "@capacitor/filesystem": "^8.1.1"
+    "@capacitor/filesystem": "^8.1.1",
+    "path-browserify-esm": "1.0.6"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.1.0",

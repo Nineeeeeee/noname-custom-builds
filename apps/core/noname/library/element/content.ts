@@ -55,13 +55,14 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 						prompt,
 						prompt2: `当前体力：${dying.hp}`,
 						ai1(card) {
+							const player = get.player();
 							if (typeof card == "string") {
 								const info = get.info(card);
 								if (info.ai && info.ai.order) {
 									if (typeof info.ai.order == "number") {
 										return info.ai.order;
 									} else if (typeof info.ai.order == "function") {
-										return info.ai.order();
+										return info.ai.order(null, player);
 									}
 								}
 							}
@@ -709,9 +710,30 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 	},
 	//装备栏相关
 	async disableEquip(event, trigger, player) {
-		const cards = [];
+		const cards: Card[] = [];
 		event.cards = cards;
-		const slots = [];
+		if (event.all) {
+			delete event.all;
+			const expanded: string[] = [];
+			const seen = new Set();
+			for (const raw of event.slots) {
+				const slot = typeof raw == "number" ? "equip" + raw : raw;
+				if (seen.has(slot)) {
+					continue;
+				}
+				seen.add(slot);
+				let countSlot = slot;
+				if (get.is.mountCombined() && (slot == "equip3" || slot == "equip4")) {
+					countSlot = "equip3_4";
+				}
+				const num = player.countEnabledSlot(countSlot);
+				for (let i = 0; i < num; i++) {
+					expanded.push(slot);
+				}
+			}
+			event.slots = expanded;
+		}
+		const slots: string[] = [];
 		if (get.is.mountCombined()) {
 			for (const slot of event.slots) {
 				if (slot == "equip3" || slot == "equip4") {
@@ -762,31 +784,39 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 
 				let result: Partial<Result>;
 				if (lose < left) {
-					let source = event.source;
-					const num = cards.length - (left - lose);
-					if (!source || !source.isIn()) {
-						source = player;
-					}
+					const num = Math.max(0, discardingCards.length - (left - lose));
+					if (num === 0) {
+						result = { bool: true, links: [] };
+					} else {
+						let source = event.source;
+						if (!source || !source.isIn()) {
+							source = player;
+						}
 
-					result = await source
-						.chooseButton([`选择${player == source ? "你" : get.translation(player)}的${get.cnNumber(num)}张${get.translation(slot)}牌置入弃牌堆`, cards], true, [1, num])
-						.set("filterOk", () => {
-							const evt = get.event();
+						result = await source
+							.chooseButton({
+								createDialog: [`选择${player == source ? "你" : get.translation(player)}的${get.cnNumber(num)}张${get.translation(slot)}牌置入弃牌堆`, discardingCards],
+								selectButton: [1, num],
+								forced: true,
+							})
+							.set("filterOk", () => {
+								const evt = get.event();
 
-							let result = 0;
-							for (const button of ui.selected.buttons) {
-								if (evt.slot == "equip3_4") {
-									result += Math.max(get.numOf(get.subtypes(button.link, false), "equip3"), get.numOf(get.subtypes(button.link, false), "equip4"));
-								} else {
-									result += get.numOf(get.subtypes(button.link, false), evt.slot);
+								let result = 0;
+								for (const button of ui.selected.buttons) {
+									if (evt.slot == "equip3_4") {
+										result += Math.max(get.numOf(get.subtypes(button.link, false), "equip3"), get.numOf(get.subtypes(button.link, false), "equip4"));
+									} else {
+										result += get.numOf(get.subtypes(button.link, false), evt.slot);
+									}
 								}
-							}
 
-							return result === evt.required;
-						})
-						.set("required", num)
-						.set("slot", slot)
-						.forResult();
+								return result === evt.required;
+							})
+							.set("required", num)
+							.set("slot", slot)
+							.forResult();
+					}
 				} else {
 					result = { bool: true, links: discardingCards };
 				}
@@ -799,27 +829,67 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 
 		player.$syncDisable();
 		if (cards.length > 0) {
-			await player.loseToDiscardpile(cards);
+			await player.loseToDiscardpile({ cards });
 		}
 	},
 	async enableEquip(event, trigger, player) {
 		const { slots } = event;
-		if (!slots.length) {
+		if (event.all) {
+			delete event.all;
+			const expanded: string[] = [];
+			const seen = new Set();
+			for (const raw of slots) {
+				const slot = typeof raw == "number" ? "equip" + raw : raw;
+				if (seen.has(slot)) {
+					continue;
+				}
+				seen.add(slot);
+				let countSlot = slot;
+				if (get.is.mountCombined() && (slot == "equip3" || slot == "equip4")) {
+					countSlot = "equip3";
+				}
+				const num = player.countDisabledSlot(countSlot);
+				for (let i = 0; i < num; i++) {
+					expanded.push(slot);
+				}
+			}
+			event.slots = expanded;
+		}
+		if (!event.slots.length) {
 			return;
 		}
 
-		const slotsx = [...new Set(slots)].sort();
+		const slotsx: string[] = [];
+		if (get.is.mountCombined()) {
+			for (const slot of event.slots) {
+				if (slot == "equip3" || slot == "equip4") {
+					slotsx.add("equip3_4");
+				} else {
+					slotsx.add(slot);
+				}
+			}
+		} else {
+			slotsx.addArray(event.slots);
+		}
+		slotsx.sort();
+
 		for (const slot of slotsx) {
-			const lost = player.countDisabledSlot(slot);
-			const gain = Math.min(lost, get.numOf(slots, slot));
+			const countKey = slot == "equip3_4" ? "equip3" : slot;
+			const lost = player.countDisabledSlot(countKey);
+			let gain: number;
+			if (slot == "equip3_4") {
+				gain = Math.min(lost, Math.max(get.numOf(event.slots, "equip3"), get.numOf(event.slots, "equip4")));
+			} else {
+				gain = Math.min(lost, get.numOf(event.slots, slot));
+			}
 			if (lost <= 0) {
 				continue;
 			}
 
 			game.log(player, `恢复了${get.cnNumber(gain)}个`, `#g${get.translation(slot)}栏`);
 			player.disabledSlots ??= {};
-			player.disabledSlots[slot] ??= 0;
-			player.disabledSlots[slot] -= gain;
+			player.disabledSlots[countKey] ??= 0;
+			player.disabledSlots[countKey] -= gain;
 		}
 
 		player.$syncDisable();
@@ -9226,7 +9296,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			}
 			event.dialog = get.idDialog(event.videoId);
 
-			const createDialog = (cards2, id, customButton) => {
+			const createDialog = (cards2, id, customButton, event) => {
 				const dialog = get.idDialog(id);
 				dialog.forcebutton = true;
 				//dialog.style.display = "none";
@@ -9241,21 +9311,22 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				}
 				//允许自定义展示牌时对话框里的按钮
 				if (typeof customButton == "function") {
-					dialog.buttons.forEach(button => customButton(button));
+					dialog.buttons.forEach(button => customButton(button, event));
 				}
 				//dialog.style.display = "";
 			};
 			const customButton = event.customButton || (() => {});
 			//创建对话框
-			createDialog(event.hiddencards, event.videoId, customButton);
+			createDialog(event.hiddencards, event.videoId, customButton, event);
 			game.broadcast(
-				(func, cards2, id, customButton) => {
-					func(cards2, id, customButton);
+				(func, cards2, id, customButton, event) => {
+					func(cards2, id, customButton, event);
 				},
 				createDialog,
 				event.hiddencards,
 				event.videoId,
-				customButton
+				customButton,
+				event
 			);
 			//处理历史记录的log
 			game.addVideo("showCards", player, [event.str, get.cardsInfo(cards)]);
@@ -9683,6 +9754,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 		}
 	},
 	useCard: [
+		// step 0
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			if (!event.card) {
@@ -9693,38 +9765,194 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			if (!get.info(event.card, false).noForceDie) {
 				event.forceDie = true;
 			}
-			//player.using=cards;
-			let cardaudio = true;
-
-			if (event.skill) {
-				if (lib.skill[event.skill].audio) {
+			event._playCardAnimation = () => {
+				let cardaudio = true;
+				if (event.skill) {
+					if (lib.skill[event.skill].audio) {
+						cardaudio = false;
+					}
+					if (get.info(event.skill).popname) {
+						player.tryCardAnimate(event.card, event.card.name, "metal", true);
+					}
+				} else if (!event.nopopup) {
+					if (lib.translate[`${event.card.name}_pop`]) {
+						player.tryCardAnimate(event.card, lib.translate[`${event.card.name}_pop`], "metal");
+					} else {
+						player.tryCardAnimate(event.card, event.card.name, "metal");
+					}
+				}
+				if (event.audio === false) {
 					cardaudio = false;
 				}
-				if (lib.skill[event.skill].log != false) {
-					player.logSkill(event.skill, false, null, null, [event, event.player]);
+				if (cardaudio) {
+					game.broadcastAll(
+						(player, card) => {
+							game.playCardAudio(card, player);
+						},
+						player,
+						event.card
+					);
 				}
-				if (get.info(event.skill).popname) {
-					player.tryCardAnimate(event.card, event.card.name, "metal", true);
+			};
+			event._playThrowAnimation = () => {
+				player.useCardAnimateBefore?.(event, trigger, player);
+				if (event.animate == false || event.throw === false) {
+					return;
 				}
-			} else if (!event.nopopup) {
-				if (lib.translate[`${event.card.name}_pop`]) {
-					player.tryCardAnimate(event.card, lib.translate[`${event.card.name}_pop`], "metal");
+				let throw_cards = event.cards;
+				let virtualCard_str = false;
+				for (const id in event.lose_map) {
+					if (id == "noowner") {
+						continue;
+					}
+					const owner = (_status.connectMode ? lib.playerOL : game.playerMap)[id];
+					const originalThrows = event.lose_map[id];
+					const throws = originalThrows.slice();
+					try {
+						if (owner == player) {
+							if (!throw_cards.length && lib.config.card_animation_info) {
+								const virtualCard = ui.create.card();
+								virtualCard._destroy = true;
+								virtualCard.expired = true;
+								const number = card.number;
+								virtualCard.init([get.suit(card), typeof number == "number" ? number : "虚拟", card.name, card.nature]);
+								virtualCard_str = virtualCard.querySelector(".info").innerHTML;
+								throw_cards = [virtualCard];
+								throws.add(virtualCard);
+							}
+							if (lib.config.card_animation_info) {
+								throws.addArray(event.lose_map.noowner);
+							}
+						}
+						if (throws.length) {
+							event.lose_map[id] = throws;
+							owner.$throw(throws);
+						}
+					} finally {
+						event.lose_map[id] = originalThrows;
+					}
+				}
+				if (event.lose_map.noowner.length && !lib.config.card_animation_info) {
+					for (const card of event.lose_map.noowner) {
+						game.broadcastAll(
+							(player, card, cardid) => {
+								let event;
+								if (game.online) {
+									event = {};
+								} else {
+									event = _status.event;
+								}
+								if (game.chess) {
+									event.node = card.copy("thrown", "center", ui.arena).addTempClass("start");
+								} else {
+									event.node = player.$throwordered(card.copy(), true);
+								}
+								if (lib.cardOL) {
+									lib.cardOL[cardid] = event.node;
+								}
+								event.node.cardid = cardid;
+								event.node.classList.add("thrownhighlight");
+							},
+							player,
+							card,
+							get.id()
+						);
+					}
+				}
+				if (lib.config.card_animation_info) {
+					game.broadcastAll(
+						(cards, card, card_cards, str) => {
+							for (const nodex of cards) {
+								const node = nodex.clone;
+								if (nodex._tempName) {
+									nodex._tempName.delete();
+									delete nodex._tempName;
+								}
+								if (!node) {
+									continue;
+								}
+								if (str) {
+									node.querySelector(".info").innerHTML = str;
+								}
+								if (cards.length > 1 || !card.isCard || card.name != node.name || card.nature != node.nature || !card.cards.length) {
+									ui.create.cardTempName(card, node);
+									if (node._tempName && card_cards?.length <= 0) {
+										node._tempName.innerHTML = node._tempName.innerHTML.slice(0, node._tempName.innerHTML.indexOf("<span", -1));
+										node._tempName.innerHTML += "<span style='color:black'>虚拟</span></span>";
+									}
+								}
+							}
+						},
+						throw_cards,
+						event.card,
+						event.cards,
+						virtualCard_str
+					);
+				}
+				if (lib.config.sync_speed && throw_cards[0] && throw_cards[0].clone) {
+					const waitingForTransition = get.id();
+					event.waitingForTransition = waitingForTransition;
+					throw_cards[0].clone.listenTransition(() => {
+						if (_status.waitingForTransition === waitingForTransition && _status.paused) {
+							game.resume();
+						}
+						if (event.waitingForTransition === waitingForTransition) {
+							delete event.waitingForTransition;
+						}
+					});
+				}
+			};
+			event._playTargetAnimation = () => {
+				const targets = event.targets;
+				if (event.animate == false || event.line === false || event.hideTargets) {
+					return;
+				}
+				if (event.card.name == "wuxie" && event.getParent()._info_map) {
+					let evtmap = event.getParent()._info_map;
+					if (evtmap._source) {
+						evtmap = evtmap._source;
+					}
+					const lining = (evtmap.multitarget ? evtmap.targets : evtmap.target) || event.player;
+					if (Array.isArray(lining) && event.getTrigger().name == "jiedao") {
+						player.line(lining[0], "green");
+					} else {
+						player.line(lining, "green");
+					}
+				} else if (event.card.name == "youdishenru" && event.getParent().source) {
+					let lining = event.getParent().sourcex || event.getParent().source2 || event.getParent().source;
+					if (lining == player && event.getParent().sourcex2) {
+						lining = event.getParent().sourcex2;
+					}
+					if (Array.isArray(lining) && event.getTrigger().name == "jiedao") {
+						player.line(lining[0], "green");
+					} else {
+						player.line(lining, "green");
+					}
 				} else {
-					player.tryCardAnimate(event.card, event.card.name, "metal");
+					const config = {};
+					const nature = get.natureList(event.card)[0];
+					if (nature || (event.card.classList && event.card.classList.contains(nature))) {
+						config.color = nature;
+					}
+					if (event.addedTarget) {
+						player.line2(targets.concat(event.addedTargets), config);
+					} else if (get.info(event.card, false).multitarget && targets.length > 1 && !get.info(event.card, false).multiline) {
+						player.line2(targets, config);
+					} else {
+						player.line(targets, config);
+					}
 				}
+			};
+			event._playUseCardAnimation = () => {
+				event._playCardAnimation();
+				event._playThrowAnimation();
+				event._playTargetAnimation();
+			};
+			//player.using=cards;
+			if (event.skill && lib.skill[event.skill].log != false) {
+				player.logSkill(event.skill, false, null, null, [event, event.player]);
 			}
-			if (event.audio === false) {
-				cardaudio = false;
-			}
-			if (cardaudio) {
-				game.broadcastAll(
-					(player, card) => {
-						game.playCardAudio(card, player);
-					},
-					player,
-					event.card
-				);
-			}
+			event._playCardAnimation();
 			event.id = get.id();
 			if (!Array.isArray(event.excluded)) {
 				event.excluded = [];
@@ -9794,104 +10022,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 					event.lose_map.noowner.add(cards_ow.shift());
 				}
 			}
-			player.useCardAnimateBefore?.(event, trigger, player);
-			if (event.animate != false && event.throw !== false) {
-				let throw_cards = event.cards;
-				let virtualCard_str = false;
-				for (const id in event.lose_map) {
-					if (id == "noowner") {
-						continue;
-					}
-					const owner = (_status.connectMode ? lib.playerOL : game.playerMap)[id];
-					const throws = event.lose_map[id];
-					if (owner == player) {
-						if (!throw_cards.length && lib.config.card_animation_info) {
-							const virtualCard = ui.create.card();
-							virtualCard._destroy = true;
-							virtualCard.expired = true;
-							const info = lib.card[card.name];
-							const number = card.number;
-							virtualCard.init([get.suit(card), typeof number == "number" ? number : "虚拟", card.name, card.nature]);
-							virtualCard_str = virtualCard.querySelector(".info").innerHTML;
-							throw_cards = [virtualCard];
-							throws.add(virtualCard);
-						}
-						if (lib.config.card_animation_info) {
-							throws.addArray(event.lose_map.noowner);
-						}
-					}
-					if (throws.length) {
-						owner.$throw(throws);
-					}
-				}
-				if (event.lose_map.noowner.length && !lib.config.card_animation_info) {
-					for (const card of event.lose_map.noowner) {
-						game.broadcastAll(
-							(player, card, cardid) => {
-								let event;
-								if (game.online) {
-									event = {};
-								} else {
-									event = _status.event;
-								}
-								if (game.chess) {
-									event.node = card.copy("thrown", "center", ui.arena).addTempClass("start");
-								} else {
-									event.node = player.$throwordered(card.copy(), true);
-								}
-								if (lib.cardOL) {
-									lib.cardOL[cardid] = event.node;
-								}
-								event.node.cardid = cardid;
-								event.node.classList.add("thrownhighlight");
-							},
-							player,
-							card,
-							get.id()
-						);
-					}
-				}
-				if (lib.config.card_animation_info) {
-					game.broadcastAll(
-						(cards, card, card_cards, str) => {
-							for (const nodex of cards) {
-								const node = nodex.clone;
-								if (nodex._tempName) {
-									nodex._tempName.delete();
-									delete nodex._tempName;
-								}
-								if (!node) {
-									continue;
-								}
-								if (str) {
-									node.querySelector(".info").innerHTML = str;
-								}
-								if (cards.length > 1 || !card.isCard || card.name != node.name || card.nature != node.nature || !card.cards.length) {
-									ui.create.cardTempName(card, node);
-									if (node._tempName && card_cards?.length <= 0) {
-										node._tempName.innerHTML = node._tempName.innerHTML.slice(0, node._tempName.innerHTML.indexOf("<span", -1));
-										node._tempName.innerHTML += "<span style='color:black'>虚拟</span></span>";
-									}
-								}
-							}
-						},
-						throw_cards,
-						event.card,
-						event.cards,
-						virtualCard_str
-					);
-				}
-				if (lib.config.sync_speed && throw_cards[0] && throw_cards[0].clone) {
-					const waitingForTransition = get.time();
-					event.waitingForTransition = waitingForTransition;
-					throw_cards[0].clone.listenTransition(() => {
-						if (_status.waitingForTransition == waitingForTransition && _status.paused) {
-							game.resume();
-						}
-						delete event.waitingForTransition;
-					});
-				}
-			}
+			event._playThrowAnimation();
 			if (event.cards.length) {
 				const ownerCards = event.cards.filter(card => get.owner(card));
 				const directDiscard = event.cards.filter(card => !get.owner(card));
@@ -9935,45 +10066,10 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			}
 			await event.trigger("useCard0");
 		},
+		// step 1
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
-			if (event.animate != false && event.line != false && !event.hideTargets) {
-				if (event.card.name == "wuxie" && event.getParent()._info_map) {
-					let evtmap = event.getParent()._info_map;
-					if (evtmap._source) {
-						evtmap = evtmap._source;
-					}
-					const lining = (evtmap.multitarget ? evtmap.targets : evtmap.target) || event.player;
-					if (Array.isArray(lining) && event.getTrigger().name == "jiedao") {
-						player.line(lining[0], "green");
-					} else {
-						player.line(lining, "green");
-					}
-				} else if (event.card.name == "youdishenru" && event.getParent().source) {
-					let lining = event.getParent().sourcex || event.getParent().source2 || event.getParent().source;
-					if (lining == player && event.getParent().sourcex2) {
-						lining = event.getParent().sourcex2;
-					}
-					if (Array.isArray(lining) && event.getTrigger().name == "jiedao") {
-						player.line(lining[0], "green");
-					} else {
-						player.line(lining, "green");
-					}
-				} else {
-					const config = {};
-					const nature = get.natureList(event.card)[0];
-					if (nature || (event.card.classList && event.card.classList.contains(nature))) {
-						config.color = nature;
-					}
-					if (event.addedTarget) {
-						player.line2(targets.concat(event.addedTargets), config);
-					} else if (get.info(event.card, false).multitarget && targets.length > 1 && !get.info(event.card, false).multiline) {
-						player.line2(targets, config);
-					} else {
-						player.line(targets, config);
-					}
-				}
-			}
+			event._playTargetAnimation();
 			if (targets.length && !event.hideTargets) {
 				const str = targets.length == 1 && targets[0] == player ? "#b自己" : targets.sortBySeat();
 				if (cards.length && !event.card.isCard) {
@@ -10011,14 +10107,17 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			}
 			await event.trigger("useCard1");
 		},
+		// step 2
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			await event.trigger("yingbian");
 		},
+		// step 3
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			await event.trigger("useCard2");
 		},
+		// step 4
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			await event.trigger("useCard");
@@ -10031,6 +10130,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				}, event.id);
 			};
 		},
+		// step 5
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			event.sortTarget = (animate, sort) => {
@@ -10111,12 +10211,15 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				}
 			};
 		},
+		// step 6
 		async (event, trigger, player) => {
 			await event._triggerTo("useCardToPlayer", "triggeredTargets1", "isFirstTarget1");
 		},
+		// step 7
 		async (event, trigger, player) => {
 			await event._triggerTo("useCardToTarget", "triggeredTargets2", "isFirstTarget2");
 		},
+		// step 8
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			const info = get.info(event.card, false);
@@ -10131,12 +10234,15 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				}
 			}
 		},
+		// step 9
 		async (event, trigger, player) => {
 			await event._triggerTo("useCardToPlayered", "triggeredTargets3", "isFirstTarget3");
 		},
+		// step 10
 		async (event, trigger, player) => {
 			await event._triggerTo("useCardToTargeted", "triggeredTargets4", "isFirstTarget4", true);
 		},
+		// step 11
 		async (event, trigger, player) => {
 			const { cards, card, targets, num, target } = event;
 			if (event.all_excluded) {
@@ -10189,6 +10295,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				await next;
 			}
 		},
+		// step 12
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			if (event.all_excluded) {
@@ -10285,6 +10392,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 			}
 			event._result = await next.forResult();
 		},
+		// step 13
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			if (event.all_excluded) {
@@ -10295,6 +10403,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				event.goto(12);
 			}
 		},
+		// step 14
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			if (event.all_excluded) {
@@ -10316,6 +10425,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				await next;
 			}
 		},
+		// step 15
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			if (event.all_excluded) {
@@ -10328,8 +10438,28 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 					}
 				}
 				event.goto(11);
+				return;
 			}
+			await event.trigger("useCardEffectEnd");
+			if (event.effectedCount >= event.effectCount) {
+				return;
+			}
+
+			event._playUseCardAnimation();
+			// 等待重复播放的使用牌动画
+			const info = get.info(event.card, false);
+			if (!info.nodelay && event.animate != false && event.delayx !== false) {
+				if (event.waitingForTransition) {
+					_status.waitingForTransition = event.waitingForTransition;
+					game.pause();
+				} else {
+					game.delayx();
+				}
+			}
+
+			event.goto(11);
 		},
+		// step 16
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			if (event.postAi) {
@@ -10347,6 +10477,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				event.finish();
 			}
 		},
+		// step 17
 		async (event, trigger, player) => {
 			const { cards, card, targets, num } = event;
 			event._oncancel();
@@ -11678,60 +11809,64 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 					}
 				}
 				for (const card of cardx) {
-					if (card.gaintag && card.gaintag.length) {
-						event.gaintag_map[card.cardid] = card.gaintag.slice(0);
-						//仅移除非永久标记
-						const tags = card.gaintag.filter(tag => !tag.startsWith("eternal_"));
-						tags.forEach(tag => card.removeGaintag(tag));
-					}
+					if (card.isViewAsCard) {
+						// 删掉转化延时锦囊假牌
+						card.remove();
+					} else {
+						if (card.gaintag && card.gaintag.length) {
+							event.gaintag_map[card.cardid] = card.gaintag.slice(0);
+							//仅移除非永久标记
+							const tags = card.gaintag.filter(tag => !tag.startsWith("eternal_"));
+							tags.forEach(tag => card.removeGaintag(tag));
+						}
 
-					card.style.transform += " scale(0.2)";
-					card.classList.remove("glow");
-					card.classList.remove("glows");
-					card.recheck();
+						card.style.transform += " scale(0.2)";
+						card.classList.remove("glow");
+						card.classList.remove("glows");
+						card.recheck();
 
-					const info = lib.card[card.name];
-					if ("_destroy" in card) {
-						if (card._destroy) {
+						const info = lib.card[card.name];
+						if ("_destroy" in card) {
+							if (card._destroy) {
+								card.delete();
+								card.destroyed = card._destroy;
+								continue;
+							}
+						} else if ("destroyed" in card) {
+							if (event.position && card.willBeDestroyed(event.position.id, null, event)) {
+								card.selfDestroy(event);
+								continue;
+							}
+						} else if (info.destroy) {
 							card.delete();
-							card.destroyed = card._destroy;
+							card.destroyed = info.destroy;
 							continue;
 						}
-					} else if (event.position && card.willBeDestroyed(event.position.id, null, event)) {
-						card.selfDestroy(event);
-						continue;
-					} else if (info.destroy) {
-						card.delete();
-						card.destroyed = info.destroy;
-						continue;
-					}
-					/*else if ("destroyed" in cardx[j]) {
-						
-					}*/
-					if (event.position) {
-						if (_status.discarded) {
-							if (event.position == ui.discardPile) {
-								_status.discarded.add(card);
-							} else {
-								_status.discarded.remove(card);
+						if (event.position) {
+							if (_status.discarded) {
+								if (event.position == ui.discardPile) {
+									_status.discarded.add(card);
+								} else {
+									_status.discarded.remove(card);
+								}
 							}
-						}
-						if (event.insert_index) {
-							card.fix();
-							event.position.insertBefore(card, event.insert_index(event, card));
-						} else if (event.insert_card) {
-							card.fix();
-							event.position.insertBefore(card, event.position.firstChild);
-						} else if (event.position == ui.cardPile) {
-							card.fix();
-							event.position.appendChild(card);
+							if (event.insert_index) {
+								card.fix();
+								event.position.insertBefore(card, event.insert_index(event, card));
+							} else if (event.insert_card) {
+								card.fix();
+								event.position.insertBefore(card, event.position.firstChild);
+							} else if (event.position == ui.cardPile) {
+								card.fix();
+								event.position.appendChild(card);
+							} else {
+								card.goto(event.position);
+							}
 						} else {
-							card.goto(event.position);
+							card.remove();
 						}
-					} else {
-						card.remove();
+						//if(ss.includes(cardx[j])) cards.splice(i--,1);
 					}
-					//if(ss.includes(cardx[j])) cards.splice(i--,1);
 				}
 			}
 			if (player == game.me) {
@@ -13258,6 +13393,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				if (ui.confirm) {
 					ui.confirm.close();
 				}
+				game.resume();
 				_status.imchoosing = false;
 				setTimeout(() => {
 					ui.arena.classList.remove("choose-to-move");
@@ -13265,6 +13401,7 @@ export const Content: Record<string, ContentFuncByAll | ContentFuncsByAll> = {
 				resolve(result);
 			};
 			//开搞
+			game.pause();
 			game.countChoose();
 			event.choosing = true;
 			result = await promise;

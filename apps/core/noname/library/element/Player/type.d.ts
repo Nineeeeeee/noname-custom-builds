@@ -12,6 +12,18 @@ import type { Card, VCard, Player, Button, Dialog, GameEvent } from ".."
 export type BroadSelect = number | Select
 
 /**
+ * 可传进`get.filter`作为卡牌过滤参数的对象
+ */
+export interface CardFilter {
+	name?: string | string[];
+	type?: string | string[];
+	subtype?: string | string[];
+	color?: string | string[];
+	suit?: string | string[];
+	number?: string | string[];
+}
+
+/**
  * 
  */
 export interface CheckCardParams {
@@ -28,7 +40,7 @@ export interface CheckCardParams {
 	 * @param event - 触发选择事件的名称，一般情况下可能不存在
 	 * @returns 牌是否符合条件
 	 */
-	filterCard?: boolean | ((card: Card, player: Player, event?: string) => boolean);
+	filterCard?: boolean | CardFilter | ((card: Card, player: Player, event?: string) => boolean);
 	
 	/**
 	 * 需要选择牌数量的范围
@@ -247,11 +259,19 @@ export interface EventHideShownCardsParams {
 export interface EventDisableEquipParams {
 	source?: Player;
 	slots?: string[];
+	/**
+	 * 设为 true 时，废除指定装备栏类型当前*所有*仍启用的槽位。
+	 */
+	all?: boolean;
 }
 
 export interface EventEnableEquipParams {
 	source?: Player;
 	slots?: string[];
+	/**
+	 * 设为 true 时，恢复指定装备栏类型当前*所有*被废除的槽位。
+	 */
+	all?: boolean;
 }
 
 export interface EventExpandEquipParams {
@@ -517,6 +537,11 @@ export interface EventRandomGainParams {
 	 * 是否在获取时显示指示线
 	 */
 	line?: boolean;
+
+	/**
+	 * 获得牌时的动画表现，默认为 "giveAuto"
+	 */
+	animate?: GainAnimate;
 }
 
 export interface EventDiscardParams {

@@ -15,8 +15,8 @@ import com.getcapacitor.BridgeActivity
 class MainActivity : BridgeActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         registerPlugin(SafFsPlugin::class.java)
+        super.onCreate(savedInstanceState)
 
         val webView = bridge.webView
         // 游戏资源由 https://localhost 提供，但独立联机大厅支持玩家填写局域网或
