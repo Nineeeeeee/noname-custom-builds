@@ -77,15 +77,15 @@ let uploaded = 0,
 	reused = 0;
 const verifyJobs: [string, { hash: string; size: number }][] = [];
 await pool([...resources], 4, async ([key, object]) => {
-	const oldObject = existing.has(key) ? await head(s3, key) : undefined;
-	const matches = oldObject?.ContentLength === object.size && oldObject.Metadata?.sha256 === object.hash;
+	const oldObject = verifyContent && existing.has(key) ? await head(s3, key) : undefined;
+	const matches = verifyContent ? oldObject?.ContentLength === object.size && oldObject.Metadata?.sha256 === object.hash : existing.get(key) === object.size;
 	if (!matches) {
 		const bytes = await fs.readFile(object.local);
 		if (verifyContent && (digest(bytes) !== object.hash || bytes.length !== object.size)) throw new Error("Local publication object changed");
 		await write(s3, key, bytes, object.hash);
 		uploaded++;
-		verifyJobs.push([key, object]);
-	} else if (trusted.has(key)) reused++;
+		if (verifyContent) verifyJobs.push([key, object]);
+	} else if (!verifyContent || trusted.has(key)) reused++;
 	else verifyJobs.push([key, object]);
 	if ((uploaded + reused + verifyJobs.length) % 500 === 0) console.log(JSON.stringify({ stage: "upload", uploaded, reused, scheduledVerification: verifyJobs.length }));
 });

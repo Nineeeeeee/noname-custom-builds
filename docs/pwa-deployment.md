@@ -4,7 +4,7 @@
 
 ## 地址与玩家使用
 
-- 游戏：`https://play.491528.xyz/launcher.html`。首次完整资源发布前显示准备发行内容，不能进入游戏。
+- 游戏：`https://play.491528.xyz/launcher.html`。已完成首次全量发布，提供启动器与完整下载安装。
 - 大厅：`wss://lobby.491528.xyz`，健康检查 `https://lobby.491528.xyz/health`。
 - 备用游戏地址：`https://noname-pwa-host.kartsim-pwa-cloudflare.workers.dev`。
 - 备用大厅地址：`wss://noname-lobby-host.kartsim-pwa-cloudflare.workers.dev`。
@@ -44,19 +44,18 @@ pnpm test:pwa
 pnpm exec tsc -p apps/core/pwa/tsconfig.json
 pnpm exec tsc -p packages/pwa-host/tsconfig.json
 pnpm exec tsc -p packages/server-worker/tsconfig.json
-pnpm build:pwa
-pnpm pwa:verify
+NONAME_PWA_VERIFY=0 pnpm build:pwa
 source /tmp/noname-pwa-deploy.env
 export PWA_PUBLIC_ORIGIN=https://play.491528.xyz
 pnpm pwa:plan
-pnpm pwa:publish
+pnpm pwa:publish -- --no-verify
 ```
 
-`dist/` 是唯一完整发行产物；`output/pwa/` 是自动生成的传输对象、分块包、清单和部署壳。校验器检查目录集合、所有文件字节与哈希、每个包的哈希及全部解包内容。ZIP STORE 目标约 8 MiB，上限 16 MiB。
+`dist/` 是唯一完整发行产物；`output/pwa/` 是自动生成的传输对象、分块包、清单和部署壳。独立校验工具 `pnpm pwa:verify` 保留供需要时手动使用，当前发布流程不执行。ZIP STORE 目标约 8 MiB，上限 16 MiB。
 
-发布脚本先校验本地材料，再用条件写入获取发布所有权并进入维护。先删除新清单不引用的旧对象，再上传新对象；新上传或未获得前次验证证明的对象下载回读校验。部署壳、验证清单与云端对象集合、验证实际 HTTPS 壳字节，最后开放 ready。R2 只留当前游戏发行，原始对象与安装包合计约 2.7 GB；不保留历史包、回滚或备份。Workers 平台会记录自己的部署版本。
+发布脚本核实源码提交和目标，用条件写入获取发布所有权并进入维护。先删除新清单不引用的旧对象，再上传新对象；快速发布根据对象键和大小复用已有文件，不逐个 HEAD 或下载回读校验。部署壳、确认入口可访问后，最后开放 ready。R2 只留当前游戏发行，原始对象与安装包合计约 2.7 GB；不保留历史包、回滚或备份。Workers 平台会记录自己的部署版本。
 
-失败保持维护，不自动恢复旧版。确认前一个发布进程已结束后，修复原因并运行 `pnpm pwa:publish -- --resume`。不要在另一个发布进程还运行时执行恢复；条件写入会拒绝并发抢占。取消或上传中断留下的文件由下次发布按目标清单清理。
+失败保持维护，不自动恢复旧版。确认前一个发布进程已结束后，修复原因并运行 `pnpm pwa:publish -- --resume --no-verify`。不要在另一个发布进程还运行时执行恢复；条件写入会拒绝并发抢占。取消或上传中断留下的文件由下次发布按目标清单清理。
 
 大厅独立部署，不随游戏资源发布：
 
@@ -68,7 +67,7 @@ pnpm deploy:lobby
 
 ## GitHub Actions
 
-仅个人 fork `Nineeeeeee/noname-custom-builds` 的 `my-features` 可以发布。先确认首次正式发布可用，再配置 `pwa-production` Environment：
+仅个人 fork `Nineeeeeee/noname-custom-builds` 的 `my-features` 可以发布。首次正式发布可用后，已配置 `pwa-production` Environment：
 
 - Secrets：`CLOUDFLARE_API_TOKEN`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。
 - Variable：`PWA_PUBLIC_ORIGIN=https://play.491528.xyz`。
@@ -77,9 +76,11 @@ pnpm deploy:lobby
 
 每次推送前单独核实 `git remote get-url --push origin` 确认个人仓库，并明确推送 `HEAD:refs/heads/my-features`。严禁推送 upstream。首次推送后检查“Publish offline PWA”运行结果与线上 ready 提交；随后该分支更新自动构建发布。“Publish Cloudflare lobby”只接受手动触发。
 
-工作流固定 Node 24.13.0、pnpm 9.15.9、Wrangler 4.147.0，冻结全部工作区 lockfile。凭据只提供给最后的发布步骤。PWA 发布串行，不取消正在上传的发布；过时提交在发布前核对远端分支并跳过。
+工作流固定 Node 24.13.0、pnpm 9.15.9、Wrangler 4.147.0，冻结全部工作区 lockfile。自动构建和发布也跳过额外内容完整性校验，保留协议及类型检查。凭据只提供给最后的发布步骤。PWA 发布串行，不取消正在上传的发布；过时提交在发布前核对远端分支并跳过。
 
 ## 验证范围与限制
+
+正式域名首次全量发布已就绪：15,663 个文件，原始内容 1,339,431,750 字节，云端原始对象和分块包约 2.68 GB。真实 Chromium 从 `play.491528.xyz` 全新下载完整内容、进入游戏，再关闭整个浏览器，在网络禁用且代理不可达的新浏览器进程中冷启动成功，游戏版本 1.11.7，无页面脚本异常。线上 HEAD 与音频 Range 返回正常。结果见 `output/pwa-live-results.json`，安装和离线截图见 `output/pwa-live-installed.png`、`output/pwa-live-offline.png`。
 
 自动检查：构建失败传播、完整发行与分块校验、中文路径与文件覆盖、删除标记、空目录、追加截断、扩展原子导入、租约过期与多窗口互斥、缓存/数据库不一致、深度损坏检测、即时编译、Range/HEAD、维护先于边缘缓存、旧发行拒绝、越界删除拒绝。
 

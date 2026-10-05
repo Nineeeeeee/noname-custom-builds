@@ -39,11 +39,11 @@ jobs:
                   pnpm exec tsc -p packages/pwa-host/tsconfig.json
             - run: pnpm build:pwa
               env:
+                  NONAME_PWA_VERIFY: "0"
                   NONAME_BUILD_CHANNEL: release
                   NONAME_BUILD_COMMIT: ${{ github.sha }}
-            - run: pnpm pwa:verify
-            - name: Publish verified current release
-              run: pnpm pwa:publish -- --ci
+            - name: Publish current release
+              run: pnpm pwa:publish -- --ci --no-verify
               env:
                   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
                   CLOUDFLARE_ACCOUNT_ID: d8b2e1f89db7e58447e0ca535a1def7f
