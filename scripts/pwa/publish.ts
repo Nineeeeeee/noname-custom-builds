@@ -46,10 +46,15 @@ const stateKey = config.prefix + "control/state.json";
 const previous = await read(s3, stateKey);
 const old = previous ? (JSON.parse(new TextDecoder().decode(previous.bytes)) as ReleaseState & { verifiedManifestSha256?: string }) : undefined;
 if (old?.state === "maintenance") {
-	const previousRunner = /^github-(\d+)-/.exec(old.publicationId);
+	const previousRunner = /^github-(\d+)-(\d+)$/.exec(old.publicationId);
 	if (ci && previousRunner) {
-		const r = await fetch(`https://api.github.com/repos/${config.repository}/actions/runs/${previousRunner[1]}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, "User-Agent": "noname-pwa-publisher" } });
-		if (!r.ok || ((await r.json()) as any).status !== "completed") throw new Error("Previous publication runner has not finished");
+		if (previousRunner[1] === process.env.GITHUB_RUN_ID) {
+			if (Number(previousRunner[2]) >= Number(process.env.GITHUB_RUN_ATTEMPT)) throw new Error("Cannot resume the current publication attempt");
+			// GitHub only starts a rerun after the prior attempt has ended.
+		} else {
+			const r = await fetch(`https://api.github.com/repos/${config.repository}/actions/runs/${previousRunner[1]}`, { headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, "User-Agent": "noname-pwa-publisher" } });
+			if (!r.ok || ((await r.json()) as any).status !== "completed") throw new Error("Previous publication runner has not finished");
+		}
 	} else if (!args.includes("--resume")) throw new Error("Previous publication is in maintenance. Confirm its runner ended, then use --resume.");
 }
 const previousManifest = await read(s3, config.prefix + "current/manifest.json");
@@ -103,10 +108,31 @@ if (verifyContent) await verifyRemote(s3, config.prefix + "current/manifest.json
 const final = await list(s3);
 if (final.size !== allowed.size || [...final.keys()].some(k => !allowed.has(k))) throw new Error("Final R2 object set differs from current release");
 for (const [key, object] of resources) if (final.get(key) !== object.size) throw new Error("Final R2 object size mismatch");
-// Confirm the shell is actually reachable while maintenance is still authoritative.
+// Probe the deployed Worker; CI can use its verified workers.dev alias if the
+// custom domain's edge rejects the runner or has not propagated yet.
+let probeOrigin = origin;
+async function publicResponse(route: string): Promise<Response> {
+	for (const candidate of [...new Set([probeOrigin, ...(ci ? [config.workerOrigin] : [])])]) {
+		for (let attempt = 0; attempt < 3; attempt++) {
+			try {
+				const response = await fetch(candidate + route, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+				if (response.ok) {
+					probeOrigin = candidate;
+					return response;
+				}
+				console.log(JSON.stringify({ stage: "public-probe-retry", origin: candidate, route, status: response.status, attempt: attempt + 1 }));
+				await response.body?.cancel();
+			} catch {
+				console.log(JSON.stringify({ stage: "public-probe-retry", origin: candidate, route, networkError: true, attempt: attempt + 1 }));
+			}
+			await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
+		}
+	}
+	throw new Error(`Deployed endpoint unavailable: ${route}`);
+}
+// Confirm the shell is reachable while maintenance is still authoritative.
 for (const route of ["/launcher.html", "/service-worker.js", "/manifest.webmanifest"]) {
-	const response = await fetch(origin + route, { cache: "no-store" });
-	if (!response.ok) throw new Error(`Deployed shell unavailable: ${route}`);
+	const response = await publicResponse(route);
 	if (verifyContent) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		const expected = await fs.readFile("output/pwa/shell" + route);
@@ -117,7 +143,7 @@ const ownership = await read(s3, stateKey);
 if (!ownership || ownership.etag !== stateEtag || JSON.parse(new TextDecoder().decode(ownership.bytes)).publicationId !== publicationId) throw new Error("Lost publication ownership");
 await changeState({ ...base, state: "ready", updatedAt: new Date().toISOString(), message: undefined });
 try {
-	const response = await fetch(origin + "/__pwa/status", { cache: "no-store" });
+	const response = await publicResponse("/__pwa/status");
 	const publicState = (await response.json()) as ReleaseState;
 	if (!response.ok || publicState.state !== "ready" || publicState.releaseId !== m.releaseId || publicState.manifestSha256 !== manifestHash) throw new Error("Public ready state verification failed");
 } catch (error) {
@@ -126,4 +152,4 @@ try {
 	await changeState({ ...base, updatedAt: new Date().toISOString(), verifiedManifestSha256: manifestHash });
 	throw error;
 }
-console.log(JSON.stringify({ stage: "ready", publicationId, releaseId: m.releaseId, commit: m.commit, fileCount: m.fileCount, totalBytes: m.totalBytes, uploaded, verified, reused, storedBytes: [...final.values()].reduce((a, b) => a + b, 0), origin }));
+console.log(JSON.stringify({ stage: "ready", publicationId, releaseId: m.releaseId, commit: m.commit, fileCount: m.fileCount, totalBytes: m.totalBytes, uploaded, verified, reused, storedBytes: [...final.values()].reduce((a, b) => a + b, 0), origin, probeOrigin }));

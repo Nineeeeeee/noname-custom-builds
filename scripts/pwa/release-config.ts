@@ -5,4 +5,5 @@ export const releaseConfig = Object.freeze({
 	repository: "Nineeeeeee/noname-custom-builds",
 	branch: "my-features",
 	worker: "noname-pwa-host",
+	workerOrigin: "https://noname-pwa-host.kartsim-pwa-cloudflare.workers.dev",
 });

@@ -76,7 +76,7 @@ pnpm deploy:lobby
 
 每次推送前单独核实 `git remote get-url --push origin` 确认个人仓库，并明确推送 `HEAD:refs/heads/my-features`。严禁推送 upstream。首次推送后检查“Publish offline PWA”运行结果与线上 ready 提交；随后该分支更新自动构建发布。“Publish Cloudflare lobby”只接受手动触发。
 
-工作流固定 Node 24.13.0、pnpm 9.15.9、Wrangler 4.147.0，冻结全部工作区 lockfile。自动构建和发布也跳过额外内容完整性校验，保留协议及类型检查。凭据只提供给最后的发布步骤。PWA 发布串行，不取消正在上传的发布；过时提交在发布前核对远端分支并跳过。
+工作流固定 Node 24.13.0、pnpm 9.15.9、Wrangler 4.147.0，冻结全部工作区 lockfile。自动构建和发布也跳过额外内容完整性校验，保留协议及类型检查。凭据只提供给最后的发布步骤。PWA 发布串行，不取消正在上传的发布；过时提交在发布前核对远端分支并跳过。外部访问检查会重试；GitHub 执行器访问正式域名失败时，使用已验证的同一 Worker 的 `workers.dev` 入口检查部署，正式域名仍是玩家安装地址。本机已经实测正式域名完整下载和离线启动。失败任务可重新运行：同一运行编号的新 attempt 可以恢复已结束的旧 attempt，其他运行必须确认前一个运行已结束。
 
 ## 验证范围与限制
 
