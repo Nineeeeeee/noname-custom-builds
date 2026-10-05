@@ -13,6 +13,8 @@ export async function buildShell(dest: string) {
 	await fs.writeFile(`${dest}/manifest.webmanifest`, JSON.stringify({ id: "/launcher.html", name: "无名杀", short_name: "无名杀", description: "完整离线游戏与联机客户端", start_url: "/launcher.html", scope: "/", display: "standalone", orientation: "landscape", background_color: "#17110b", theme_color: "#17110b", icons: [192, 512].map(size => ({ src: `/pwa/icon-${size}.png`, sizes: `${size}x${size}`, type: "image/png", purpose: "any maskable" })) }));
 	const shellFiles = ["launcher.html", "pwa/launcher.js", "pwa/download-worker.js", "manifest.webmanifest", "pwa/icon-180.png", "pwa/icon-192.png", "pwa/icon-512.png"];
 	const shellId = digest(Buffer.concat(await Promise.all(shellFiles.map(p => fs.readFile(`${dest}/${p}`))))).slice(0, 16);
+	const launcher = await fs.readFile(`${dest}/launcher.html`, "utf8");
+	await fs.writeFile(`${dest}/launcher.html`, launcher.replace("__PWA_SHELL_VERSION__", shellId.slice(0, 12)));
 	await build({ entryPoints: [`${root}/apps/core/pwa/service-worker.ts`], outfile: `${dest}/service-worker.js`, bundle: true, format: "iife", target: ["chrome91", "safari16.4"], minify: true, define: { __SHELL_FILES__: JSON.stringify(shellFiles), __SHELL_ID__: JSON.stringify(shellId) } });
 	await fs.writeFile(`${dest}/pwa-shell.json`, JSON.stringify([...shellFiles, "service-worker.js"]));
 }

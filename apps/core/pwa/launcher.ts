@@ -16,6 +16,9 @@ let target: ReleaseManifest | undefined,
 	maintained = false;
 let downloaded = 0;
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1) + " MB";
+const showGameVersion = () => {
+	document.querySelector("#game-version")!.textContent = active ? `本地游戏：${active.gameVersion} · ${active.releaseId.slice(0, 12)}` : "本地游戏：未安装";
+};
 const worker = new Worker("/pwa/download-worker.js");
 worker.onmessage = async e => {
 	const data = e.data;
@@ -29,6 +32,7 @@ worker.onmessage = async e => {
 		running = false;
 		pause.hidden = true;
 		active = await activeManifest();
+		showGameVersion();
 		status.textContent = "完整安装已就绪，可以离线游玩";
 		detail.textContent = `游戏 ${active?.gameVersion} · 本次下载 ${mb(downloaded)}`;
 		play.disabled = false;
@@ -65,6 +69,7 @@ async function check(updates = false) {
 		return;
 	}
 	active = await activeManifest();
+	showGameVersion();
 	// activeRelease is committed only after installation finishes. Starting an
 	// installed game does not need a network round trip or a full cache scan.
 	target = active;
