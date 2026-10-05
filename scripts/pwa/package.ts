@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { zipSync } from "fflate";
 import { COMPILER, RUNTIME, SCHEMA, contentType, safeArchivePath, validateManifest, type ReleaseManifest } from "../../apps/core/pwa/protocol.ts";
+import { pwaBuildNumber } from "./version";
 export const digest = (data: Uint8Array | string, algorithm = "sha256") => createHash(algorithm).update(data).digest("hex");
 export async function scan(root: string) {
 	const files: string[] = [],
@@ -32,6 +33,7 @@ export async function packageRelease(root = "dist", out = "output/pwa") {
 	const commit = process.env.NONAME_BUILD_COMMIT || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 	const gameVersion = JSON.parse(await fs.readFile("apps/core/package.json", "utf8")).version;
 	const manifest: ReleaseManifest = { schemaVersion: SCHEMA, releaseId: "", commit, gameVersion, runtimeProtocol: RUNTIME, compilerVersion: COMPILER, entry: "index.html", fileCount: listing.files.length, totalBytes: 0, files: {}, directories: listing.directories, packs: {} };
+	manifest.buildNumber = pwaBuildNumber();
 	const seen = new Set<string>();
 	let pack: Record<string, Uint8Array> = {},
 		packBytes = 0;

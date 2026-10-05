@@ -17,7 +17,7 @@ let target: ReleaseManifest | undefined,
 let downloaded = 0;
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1) + " MB";
 const showGameVersion = () => {
-	document.querySelector("#game-version")!.textContent = active ? `本地游戏：${active.gameVersion} · ${active.releaseId.slice(0, 12)}` : "本地游戏：未安装";
+	document.querySelector("#game-version")!.textContent = active ? `本地游戏：${active.buildNumber ? `v${active.buildNumber}` : "旧版"} · ${active.gameVersion}` : "本地游戏：未安装";
 };
 const worker = new Worker("/pwa/download-worker.js");
 worker.onmessage = async e => {
@@ -127,7 +127,7 @@ async function check(updates = false) {
 		progress.value = 100;
 	} else {
 		status.textContent = active ? "发现游戏更新，可以下载新版本" : "准备安装完整游戏";
-		detail.textContent = `游戏 ${target!.gameVersion} · 全量内容 ${mb(target!.totalBytes)}`;
+		detail.textContent = `游戏 ${target!.buildNumber ? `v${target!.buildNumber} · ` : ""}${target!.gameVersion} · 全量内容 ${mb(target!.totalBytes)}`;
 		install.textContent = active ? "继续下载 / 更新" : "完整下载";
 	}
 }

@@ -20,6 +20,7 @@ export interface ReleaseManifest {
 	releaseId: string;
 	commit: string;
 	gameVersion: string;
+	buildNumber?: number;
 	runtimeProtocol: number;
 	compilerVersion: string;
 	entry: "index.html";
