@@ -15,9 +15,11 @@ export function workerMessage<T>(data: unknown, target = navigator.serviceWorker
 		target.postMessage(data, [channel.port2]);
 	});
 }
-export async function ensureController() {
+export async function ensureController(update = false) {
 	if (!("serviceWorker" in navigator) || !("caches" in globalThis) || !("indexedDB" in globalThis) || !crypto.subtle) throw new Error("浏览器不支持完整离线存储，请使用新版 Chrome、Edge 或 Safari");
-	const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/", updateViaCache: "none" });
+	let registration = navigator.serviceWorker.controller ? await navigator.serviceWorker.getRegistration("/") : undefined;
+	if (!registration) registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/", updateViaCache: "none" });
+	else if (update) await registration.update();
 	await navigator.serviceWorker.ready;
 	if (!navigator.serviceWorker.controller)
 		await new Promise<void>((resolve, reject) => {

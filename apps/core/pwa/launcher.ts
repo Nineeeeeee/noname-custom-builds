@@ -1,5 +1,5 @@
-import { validateManifest, sha256, type ReleaseManifest } from "./protocol";
-import { activeManifest, missingObjects } from "./storage";
+import { type ReleaseManifest } from "./protocol";
+import { activeManifest } from "./storage";
 import { ensureController, onlineState, workerMessage } from "./client";
 declare const __LOBBY_URL__: string;
 const status = document.querySelector("#status")!,
@@ -34,7 +34,6 @@ worker.onmessage = async e => {
 		running = false;
 		pause.hidden = true;
 		active = await activeManifest();
-		await workerMessage({ type: "gc" }).catch(console.error);
 		status.textContent = "完整安装已就绪，可以离线游玩";
 		detail.textContent = `游戏 ${active?.gameVersion} · 本次下载 ${mb(downloaded)}`;
 		play.disabled = false;
@@ -42,6 +41,7 @@ worker.onmessage = async e => {
 		install.textContent = "检查更新";
 		repair.disabled = false;
 		progress.value = 100;
+		void workerMessage({ type: "gc" }).catch(console.error);
 	}
 	if (data.type === "error") {
 		running = false;
@@ -53,10 +53,11 @@ worker.onmessage = async e => {
 		repair.disabled = false;
 	}
 };
-async function check() {
+async function check(updates = false) {
 	install.disabled = play.disabled = repair.disabled = true;
 	maintained = false;
-	const registration = await ensureController();
+	target = undefined;
+	const registration = await ensureController(updates);
 	if (registration.waiting) {
 		const result = await workerMessage<{ activated: boolean }>({ type: "activate" }, registration.waiting);
 		if (result.activated) {
@@ -68,13 +69,26 @@ async function check() {
 		return;
 	}
 	active = await activeManifest();
+	// activeRelease is committed only after installation finishes. Starting an
+	// installed game does not need a network round trip or a full cache scan.
+	target = active;
+	play.disabled = !active;
+	install.disabled = false;
+	repair.disabled = !active;
+	invitation.hidden = true;
+	if (active) {
+		status.textContent = "完整安装已就绪，可以离线游玩";
+		detail.textContent = `游戏 ${active.gameVersion}`;
+		install.textContent = "检查更新";
+		progress.value = 100;
+		if (!updates) return;
+	}
 	const state = await onlineState();
 	invitation.hidden = !state?.invitationRequired;
 	if (state?.invitationRequired) {
-		const complete = !!active && (await missingObjects(active)).size === 0;
 		target = undefined;
-		play.disabled = !complete;
-		status.textContent = complete ? "本地完整安装可用；下载和更新需要邀请码" : "请输入朋友提供的邀请码，开始下载完整游戏";
+		install.disabled = repair.disabled = true;
+		status.textContent = active ? "本地完整安装可用；下载和更新需要邀请码" : "请输入朋友提供的邀请码，开始下载完整游戏";
 		detail.textContent = "";
 		return;
 	}
@@ -85,22 +99,16 @@ async function check() {
 		install.textContent = "重新检查";
 		return;
 	}
-	if (state) {
+	if (state && active?.releaseId !== state.releaseId) {
 		const response = await fetch(`/__pwa/manifest?releaseId=${encodeURIComponent(state.releaseId)}`, { cache: "no-store" });
 		if (!response.ok) throw new Error("发行内容暂不可用，请稍后重试");
-		const bytes = await response.arrayBuffer();
-		if ((await sha256(bytes)) !== state.manifestSha256) throw new Error("发行清单校验失败");
-		target = JSON.parse(new TextDecoder().decode(bytes));
-		validateManifest(target!);
+		target = await response.json();
 	} else {
 		target = active;
 	}
-	const missing = active ? await missingObjects(active) : new Set(["uninstalled"]);
-	const complete = !!active && missing.size === 0;
-	play.disabled = !complete || (!!state && active!.releaseId !== state.releaseId);
 	repair.disabled = !target;
 	install.disabled = !target;
-	if (!state && !complete) {
+	if (!state && !active) {
 		status.textContent = "尚未完整安装，请联网完成下载";
 		detail.textContent = "";
 		return;
@@ -111,13 +119,13 @@ async function check() {
 		install.disabled = true;
 		return;
 	}
-	if (complete && active!.releaseId === target!.releaseId) {
+	if (active && active.releaseId === target!.releaseId) {
 		status.textContent = "完整安装已就绪，可以离线游玩";
 		detail.textContent = `游戏 ${active!.gameVersion}`;
 		install.textContent = "检查更新";
 		progress.value = 100;
 	} else {
-		status.textContent = active ? "发现更新或缺失文件，完成下载后即可进入" : "准备安装完整游戏";
+		status.textContent = active ? "发现游戏更新，可以下载新版本" : "准备安装完整游戏";
 		detail.textContent = `游戏 ${target!.gameVersion} · 全量内容 ${mb(target!.totalBytes)}`;
 		install.textContent = active ? "继续下载 / 更新" : "完整下载";
 	}
@@ -125,9 +133,9 @@ async function check() {
 async function start(deep: boolean) {
 	if (running) return;
 	try {
-		await check();
+		await check(true);
 		if (maintained || !target) return;
-		if (!deep && active?.releaseId === target.releaseId && (await missingObjects(target)).size === 0) return;
+		if (!deep && active?.releaseId === target.releaseId) return;
 		const persistent = await navigator.storage?.persist?.().catch(() => false);
 		if (!persistent) detail.textContent = "浏览器未授予持久存储，请保留足够空间和本站数据";
 		running = true;
@@ -148,7 +156,7 @@ invitation.onsubmit = async event => {
 		const response = await fetch("/__pwa/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: input.value.trim() }) });
 		if (!response.ok) throw new Error((await response.json()).error || "邀请码验证失败");
 		input.value = "";
-		await check();
+		await check(true);
 	} catch (error) {
 		status.textContent = String(error instanceof Error ? error.message : error);
 	} finally { button.disabled = false; }
@@ -156,15 +164,11 @@ invitation.onsubmit = async event => {
 install.onclick = () => start(false);
 repair.onclick = () => start(true);
 pause.onclick = () => worker.postMessage({ type: "cancel" });
-play.onclick = async () => {
-	try {
-		await check();
-		if (play.disabled || !active) return;
-		await workerMessage({ type: "pin", releaseId: active.releaseId });
-		location.href = `/index.html?release=${encodeURIComponent(active.releaseId)}`;
-	} catch (error) {
-		status.textContent = String(error);
-	}
+play.onclick = () => {
+	if (play.disabled || !active) return;
+	status.textContent = "正在进入游戏…";
+	// The navigation handler in the Service Worker pins the new game window.
+	location.href = `/index.html?release=${encodeURIComponent(active.releaseId)}`;
 };
 let addEvent: any;
 window.addEventListener("beforeinstallprompt", (event: any) => {

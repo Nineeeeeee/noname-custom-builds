@@ -1,7 +1,6 @@
 import { FileSystem, installLegacyFileSystemAPI } from "../library/fs";
 import { PwaAdapter } from "../../pwa/filesystem";
-import { activeManifest, get, missingObjects } from "../../pwa/storage";
-import { onlineState, workerMessage } from "../../pwa/client";
+import { activeManifest, get } from "../../pwa/storage";
 declare const __LOBBY_URL__: string;
 export default async function pwaReady({ lib, game }: any) {
 	if (!navigator.serviceWorker.controller) {
@@ -10,13 +9,10 @@ export default async function pwaReady({ lib, game }: any) {
 	}
 	const explicit = new URL(location.href).searchParams.get("release");
 	const m = explicit ? await get<any>("releases", explicit) : await activeManifest();
-	const online = await onlineState();
-	const state = online?.invitationRequired ? null : online;
-	if (!m || state?.state === "maintenance" || (state && state.releaseId !== m.releaseId) || (await missingObjects(m)).size) {
+	if (!m) {
 		location.replace("/launcher.html");
-		throw new Error("请完成安装或更新");
+		throw new Error("请先安装游戏");
 	}
-	await workerMessage({ type: "pin", releaseId: m.releaseId });
 	lib.path = (await import("path-browserify-esm")).default;
 	const adapter = new PwaAdapter(m);
 	lib.fs = new FileSystem(adapter);
@@ -83,13 +79,4 @@ export default async function pwaReady({ lib, game }: any) {
 	navigator.serviceWorker.addEventListener("message", event => {
 		if (event.data.type === "repair") showNotice("发现缺失资源，点击返回启动器修复");
 	});
-	const poll = async () => {
-		if (document.hidden) return;
-		const state = await onlineState();
-		if (state?.invitationRequired) return;
-		if (state?.state === "maintenance") showNotice(state.message || "服务器正在维护，点击返回启动器");
-		else if (state && state.releaseId !== m.releaseId) showNotice("游戏有更新，点击返回启动器完成更新");
-	};
-	setInterval(poll, 60000);
-	document.addEventListener("visibilitychange", poll);
 }
