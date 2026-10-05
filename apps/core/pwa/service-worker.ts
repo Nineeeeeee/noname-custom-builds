@@ -85,7 +85,8 @@ async function gc() {
 				}
 			};
 		});
-		for (const name of await caches.keys()) if (name.startsWith("noname-pwa-shell-") && name !== shellCache) await caches.delete(name);
+		// Other shell caches may belong to an installing/waiting worker. Game GC
+		// must not remove them: the next worker needs its shell for offline startup.
 		if (!liveClients.some(c => !["/", "/launcher.html"].includes(new URL(c.url).pathname))) await caches.delete(COMPILED_CACHE);
 	} finally {
 		await releaseLease(lease);
@@ -104,7 +105,7 @@ sw.addEventListener("message", event => {
 					result = { releaseId: m.releaseId };
 				}
 				if (event.data.type === "activate") {
-					const games = (await sw.clients.matchAll({ includeUncontrolled: true })).filter(c => new URL(c.url).pathname !== "/launcher.html" && new URL(c.url).pathname !== "/");
+					const games = (await sw.clients.matchAll({ includeUncontrolled: true })).filter(c => !["/launcher.html", "/", "/__pwa/recover"].includes(new URL(c.url).pathname));
 					if (games.length === 0) {
 						await sw.skipWaiting();
 						result = { activated: true };
@@ -142,7 +143,15 @@ async function route(event: FetchEvent): Promise<Response> {
 	}
 	if (url.pathname === "/service-worker.js") return fetch(request, { cache: "no-store" });
 	if (url.pathname === "/") return Response.redirect(new URL("/launcher.html", url), 302);
-	if (shellFiles.has(url.pathname)) return (await (await caches.open(shellCache)).match(url.pathname)) || new Response("Launcher missing", { status: 503 });
+	if (shellFiles.has(url.pathname)) {
+		const cache = await caches.open(shellCache);
+		const local = await cache.match(url.pathname);
+		if (local) return local;
+		// Fetch only a missing shell file; normal startup remains entirely local.
+		const response = await fetch(request, { cache: "no-store" });
+		if (response.ok) await cache.put(url.pathname, response.clone());
+		return response;
+	}
 	if (!["GET", "HEAD"].includes(request.method)) return new Response("Method not allowed", { status: 405 });
 	let releaseId = await pinned(event.clientId);
 	if (request.mode === "navigate") {

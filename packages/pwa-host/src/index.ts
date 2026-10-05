@@ -39,8 +39,11 @@ export default {
 		if (url.pathname === "/__pwa/auth") return invitationRoute(request, env);
 		if (!["GET", "HEAD"].includes(request.method)) return error("Method not allowed", 405);
 		if (url.pathname === "/" || url.pathname === "/index.html") return Response.redirect(new URL("/launcher.html", url).toString(), 302);
-		if (shell.has(url.pathname)) {
-			const asset = await env.ASSETS.fetch(request);
+		if (shell.has(url.pathname) || url.pathname === "/__pwa/recover") {
+			// Old service workers already pass /__pwa/ through to the network,
+			// so this public page can repair a missing shell without clearing data.
+			const assetRequest = url.pathname === "/__pwa/recover" ? new Request(new URL("/pwa/recover.html", url), request) : request;
+			const asset = await env.ASSETS.fetch(assetRequest);
 			const headers = new Headers(asset.headers);
 			headers.set("Cache-Control", "no-cache, no-transform");
 			if (url.pathname === "/service-worker.js") {

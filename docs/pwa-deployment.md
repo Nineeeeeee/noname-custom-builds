@@ -21,6 +21,10 @@
 
 iPad 下载或补齐文件后切回前台时，原下载可以续用已经过期但未被其他窗口接管的下载锁。实际发生多窗口抢占时显示具体原因，已下载文件和用户数据保留；重新打开启动器可继续。更新失败仍允许进入本地旧版本。
 
+如果旧版启动器显示 `Launcher missing`，关闭其他游戏窗口，联网在原安装域名打开 `https://play.491528.xyz/__pwa/recover`。此入口绕过旧启动器缓存，只更新 Service Worker 和启动器后返回原页面，不注销应用、不清空缓存或数据库，不需要重下游戏。新版游戏文件清理不再删除其他 Service Worker 的启动器缓存；个别启动器文件缺失时才联网补回，正常启动仍只读取本地。少量旧启动器缓存暂时保留，避免清理到等待激活的新版本。
+
+启动器缓存回归：`pnpm exec tsx tests/pwa/shell-recovery-browser.ts`，或加 `NONAME_TEST_BROWSER=webkit`。2026-10-05 Chromium 和 Linux WebKit 均通过：等待激活的壳缓存保留、缓存丢失后补回、网络不可用时再次启动、已发布旧 Worker 的 503 恢复，以及已安装内容与用户文件保留。
+
 相关回归验证可运行 `pnpm exec tsx tests/pwa/update-browser.ts`，以及 `NONAME_TEST_BROWSER=webkit pnpm exec tsx tests/pwa/update-browser.ts`。2026-10-05 在 Chromium 和 Linux WebKit 上验证了锁过期后恢复、按文件更新、仅下载缺失文件以及用户数据保留；iPad 真机仍需验收。
 
 ## R2 额度保护与邀请码

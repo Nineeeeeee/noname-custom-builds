@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+		<title>恢复无名杀启动器</title>
+		<style>
+			body {
+				margin: 0;
+				padding: 32px 20px;
+				background: #17110b;
+				color: #f1e3c7;
+				font:
+					16px/1.6 system-ui,
+					sans-serif;
+			}
+			main {
+				max-width: 560px;
+				margin: auto;
+			}
+			button {
+				padding: 10px 20px;
+				border: 0;
+				border-radius: 6px;
+				background: #d7b26d;
+				color: #17110b;
+				font: inherit;
+			}
+			button:disabled {
+				opacity: 0.5;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>恢复启动器</h1>
+			<p>仅更新启动器，不删除已下载的游戏、配置、录像或扩展。</p>
+			<p id="status" role="status">正在恢复…</p>
+			<button id="retry" disabled>重试</button>
+		</main>
+		<script>
+			__PWA_RECOVER_SCRIPT__;
+		</script>
+	</body>
+</html>

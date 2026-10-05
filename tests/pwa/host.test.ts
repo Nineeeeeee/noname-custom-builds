@@ -39,9 +39,13 @@ test("resource Worker checks maintenance before cache, validates versions and ha
 			},
 			head: async (key: string) => (key.endsWith(hash) ? { size: 10 } : null),
 		},
-		ASSETS: { fetch: async () => new Response("shell") },
+		ASSETS: { fetch: async (request: Request) => new Response(new URL(request.url).pathname === "/pwa/recover.html" ? "recovery" : "shell") },
 	};
 	const ctx: any = { waitUntil: (promise: Promise<unknown>) => pending.push(promise) };
+	const recovery = await host.fetch(new Request("https://game.invalid/__pwa/recover") as any, env, ctx);
+	assert.equal(await recovery.text(), "recovery");
+	assert.equal(recovery.headers.get("Cache-Control"), "no-cache, no-transform");
+	assert.equal(stateReads, 0, "public recovery must not require an invite or read R2");
 	const login = await host.fetch(new Request("https://game.invalid/__pwa/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: env.PWA_INVITE_CODE }) }) as any, env, ctx);
 	const cookie = login.headers.get("Set-Cookie")!.split(";")[0];
 	const fetch = (path: string, init?: RequestInit) => host.fetch(new Request("https://game.invalid" + path, { ...init, headers: { Cookie: cookie, ...init?.headers } }) as any, env, ctx) as unknown as Promise<Response>;
