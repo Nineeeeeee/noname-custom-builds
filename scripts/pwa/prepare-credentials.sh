@@ -11,12 +11,20 @@ credential_tmp=$(mktemp /tmp/noname-pwa-credentials.XXXXXX)
 trap 'unset pwa_worker_token pwa_r2_access pwa_r2_secret; rm -f "$credential_tmp"' EXIT
 printf 'Workers 部署 API Token（仅 CI 需要；输入不显示）：' >/dev/tty
 IFS= read -r -s pwa_worker_token </dev/tty
-printf '\nR2 Access Key ID（输入不显示）：' >/dev/tty
+printf '\n已收到 Workers Token：%s 个字符。\n' "${#pwa_worker_token}" >/dev/tty
+printf 'R2 Access Key ID（输入不显示）：' >/dev/tty
 IFS= read -r -s pwa_r2_access </dev/tty
-printf '\nR2 Secret Access Key（输入不显示）：' >/dev/tty
+printf '\n已收到 R2 Access Key ID：%s 个字符。\n' "${#pwa_r2_access}" >/dev/tty
+printf 'R2 Secret Access Key（输入不显示）：' >/dev/tty
 IFS= read -r -s pwa_r2_secret </dev/tty
-printf '\n' >/dev/tty
+printf '\n已收到 R2 Secret Access Key：%s 个字符。\n' "${#pwa_r2_secret}" >/dev/tty
 if [[ -z "$pwa_r2_access" || -z "$pwa_r2_secret" ]]; then echo '两项 R2 凭据不能为空。' >&2; exit 1; fi
+for credential_name in pwa_worker_token pwa_r2_access pwa_r2_secret; do
+  if [[ ${!credential_name} =~ [[:space:][:cntrl:]] ]]; then
+    echo '输入包含空白或控制字符，请使用 Cloudflare 页面的复制按钮重新填写。' >&2
+    exit 1
+  fi
+done
 printf 'export CLOUDFLARE_API_TOKEN=%q\nexport R2_ACCESS_KEY_ID=%q\nexport R2_SECRET_ACCESS_KEY=%q\n' "$pwa_worker_token" "$pwa_r2_access" "$pwa_r2_secret" >"$credential_tmp"
 chmod 600 "$credential_tmp"
 mv "$credential_tmp" "$credential_file"
