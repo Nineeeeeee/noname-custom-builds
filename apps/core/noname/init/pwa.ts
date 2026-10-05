@@ -10,7 +10,8 @@ export default async function pwaReady({ lib, game }: any) {
 	}
 	const explicit = new URL(location.href).searchParams.get("release");
 	const m = explicit ? await get<any>("releases", explicit) : await activeManifest();
-	const state = await onlineState();
+	const online = await onlineState();
+	const state = online?.invitationRequired ? null : online;
 	if (!m || state?.state === "maintenance" || (state && state.releaseId !== m.releaseId) || (await missingObjects(m)).size) {
 		location.replace("/launcher.html");
 		throw new Error("请完成安装或更新");
@@ -85,6 +86,7 @@ export default async function pwaReady({ lib, game }: any) {
 	const poll = async () => {
 		if (document.hidden) return;
 		const state = await onlineState();
+		if (state?.invitationRequired) return;
 		if (state?.state === "maintenance") showNotice(state.message || "服务器正在维护，点击返回启动器");
 		else if (state && state.releaseId !== m.releaseId) showNotice("游戏有更新，点击返回启动器完成更新");
 	};

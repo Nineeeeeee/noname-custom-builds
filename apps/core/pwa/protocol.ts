@@ -40,6 +40,7 @@ export interface ReleaseState {
 	runtimeProtocol: number;
 	updatedAt: string;
 	message?: string;
+	invitationRequired?: boolean;
 }
 export function normalizePath(input: string): string {
 	if (typeof input !== "string" || /[\0?#]/.test(input)) throw new Error("Invalid file path");

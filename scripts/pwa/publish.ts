@@ -30,6 +30,8 @@ if (ci) {
 		process.exit(0);
 	}
 }
+const invitationCode = process.env.PWA_INVITE_CODE;
+if (!planOnly && !invitationCode) throw new Error("Prepare PWA_INVITE_CODE before publication");
 const s3 = client();
 const resources = new Map<string, { local: string; hash: string; size: number }>();
 for (const f of Object.values(m.files)) resources.set(`${config.prefix}objects/${f.sha256}`, { local: `output/pwa/objects/${f.sha256}`, hash: f.sha256, size: f.size });
@@ -111,11 +113,29 @@ for (const [key, object] of resources) if (final.get(key) !== object.size) throw
 // Probe the deployed Worker; CI can use its verified workers.dev alias if the
 // custom domain's edge rejects the runner or has not propagated yet.
 let probeOrigin = origin;
+const probeCookies = new Map<string, string>();
 async function publicResponse(route: string): Promise<Response> {
 	for (const candidate of [...new Set([probeOrigin, ...(ci ? [config.workerOrigin] : [])])]) {
 		for (let attempt = 0; attempt < 3; attempt++) {
 			try {
-				const response = await fetch(candidate + route, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+				const headers = new Headers();
+				if (route.startsWith("/__pwa/")) {
+					if (!probeCookies.has(candidate)) {
+						const login = await fetch(candidate + "/__pwa/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: invitationCode }), signal: AbortSignal.timeout(15000) });
+						if (!login.ok) {
+							console.log(JSON.stringify({ stage: "public-probe-retry", origin: candidate, route: "/__pwa/auth", status: login.status, attempt: attempt + 1 }));
+							await login.body?.cancel();
+							await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
+							continue;
+						}
+						const cookie = login.headers.get("Set-Cookie")?.split(";")[0];
+						await login.body?.cancel();
+						if (!cookie) throw new Error("Invitation session missing");
+						probeCookies.set(candidate, cookie);
+					}
+					headers.set("Cookie", probeCookies.get(candidate)!);
+				}
+				const response = await fetch(candidate + route, { headers, cache: "no-store", signal: AbortSignal.timeout(15000) });
 				if (response.ok) {
 					probeOrigin = candidate;
 					return response;

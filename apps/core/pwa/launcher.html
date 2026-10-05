@@ -67,6 +67,15 @@
 				font: inherit;
 				cursor: pointer;
 			}
+			input {
+				width: 100%;
+				padding: 10px;
+				font: inherit;
+				border: 1px solid #725936;
+				border-radius: 8px;
+				background: #17110b;
+				color: #f5dfbb;
+			}
 			button.secondary {
 				background: #3b2b1d;
 				color: #efd7b4;
@@ -97,6 +106,7 @@
 			</header>
 			<p>一次下载全部游戏内容，之后断网也能单机游玩。联机需要网络。</p>
 			<div id="status" role="status">正在检查本地安装…</div>
+			<form id="invitation" hidden><label for="invite-code">邀请码</label><input id="invite-code" type="text" required maxlength="256" autocomplete="off" autocapitalize="off" spellcheck="false" /><button type="submit">验证邀请码</button></form>
 			<progress id="progress" max="100" value="0"></progress>
 			<p id="detail"></p>
 			<div><button id="install" disabled>完整下载</button><button id="play" disabled>进入游戏</button><button id="repair" class="secondary" disabled>完整性检查与修复</button><button id="pause" class="secondary" hidden>暂停下载</button><button id="add" class="secondary" hidden>安装到桌面</button></div>

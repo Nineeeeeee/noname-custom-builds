@@ -24,6 +24,9 @@ test("resource Worker checks maintenance before cache, validates versions and ha
 	const object = (data: Uint8Array) => ({ size: data.length, body: new Response(data).body, arrayBuffer: async () => data.buffer, json: async () => JSON.parse(new TextDecoder().decode(data)) });
 	const env: any = {
 		PWA_PREFIX: "noname-pwa/",
+		PWA_INVITE_CODE: "test-only-invitation",
+		INVITE_LOGIN_LIMIT: { limit: async () => ({ success: true }) },
+		INVITE_DOWNLOAD_LIMIT: { limit: async () => ({ success: true }) },
 		PWA_BUCKET: {
 			get: async (key: string, options?: any) => {
 				if (key.endsWith("control/state.json")) {
@@ -39,7 +42,9 @@ test("resource Worker checks maintenance before cache, validates versions and ha
 		ASSETS: { fetch: async () => new Response("shell") },
 	};
 	const ctx: any = { waitUntil: (promise: Promise<unknown>) => pending.push(promise) };
-	const fetch = (path: string, init?: RequestInit) => host.fetch(new Request("https://game.invalid" + path, init) as any, env, ctx) as unknown as Promise<Response>;
+	const login = await host.fetch(new Request("https://game.invalid/__pwa/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: env.PWA_INVITE_CODE }) }) as any, env, ctx);
+	const cookie = login.headers.get("Set-Cookie")!.split(";")[0];
+	const fetch = (path: string, init?: RequestInit) => host.fetch(new Request("https://game.invalid" + path, { ...init, headers: { Cookie: cookie, ...init?.headers } }) as any, env, ctx) as unknown as Promise<Response>;
 	const route = `/__pwa/objects/${hash}?releaseId=${m.releaseId}`;
 	assert.equal((await fetch(route)).status, 200);
 	await Promise.all(pending);

@@ -11,11 +11,30 @@
 
 固定使用同一个游戏域名安装。不同域名的数据隔离，切换域名不会搬迁存档。
 
-首次联网打开启动器，点击“完整下载”，等待“完整安装已就绪”。完整内容约 1.34 GB，建议设备预留至少 3 GB，实际能否安装取决于浏览器给本站的存储配额。中断后再次打开继续下载，已经校验的文件会复用。Chrome/Edge 可点击安装按钮或浏览器菜单安装；iPhone/iPad 使用 Safari 分享菜单“添加到主屏幕”。完整安装后关闭浏览器，再断网打开即可单机游玩。
+首次联网打开启动器，输入朋友提供的邀请码，验证后点击“完整下载”，等待“完整安装已就绪”。完整内容约 1.34 GB，建议设备预留至少 3 GB，实际能否安装取决于浏览器给本站的存储配额。中断后再次打开继续下载，已经校验的文件会复用。Chrome/Edge 可点击安装按钮或浏览器菜单安装；iPhone/iPad 使用 Safari 分享菜单“添加到主屏幕”。完整安装后关闭浏览器，再断网打开即可单机游玩。
 
 联机需要联网，在游戏中选择“联机”，连接完整地址 `wss://lobby.491528.xyz`，由一位玩家建房，其他玩家进入。Electron 使用同一个地址，建议所有玩家使用同一份源码发行版本。房主运行游戏规则与 AI，房主断开会结束房间；大厅只管理连接和转发消息。
 
 联网发现新发行版时返回启动器更新；按文件 SHA-256 下载差异，保持配置、录像、自定义素材、用户扩展和编辑后的文件。已打开的游戏窗口固定其原发行文件，新窗口使用更新后的发行版。发行更新期间在线入口显示维护；完全断网时已经完整安装的版本仍可使用。资源缺失或损坏可运行“完整性检查与修复”。不要清除本站数据，否则本地安装与存档也会丢失。
+
+## R2 额度保护与邀请码
+
+R2 是实际存储服务，S3 是访问接口。桶继续保持私有，账号 ID 和桶名不是访问凭据，隐藏 S3 地址不能阻止公开 Worker 下载入口被刷。
+
+Worker 在读取任何 R2 数据之前验证邀请码会话，包括状态、清单、原始文件、安装包、HEAD 和 Range。没有会话、错误或失效会话返回 401；缺少 Worker Secret 时返回 503，均不读取 R2。正式域名和 workers.dev 入口执行同样检查；授权检查在边缘缓存之前。未知资源路径不会读取 R2。
+
+邀请码是随机 192 位共享代码，保存在专用 Worker Secret `PWA_INVITE_CODE` 和个人 fork 的同名 Environment Secret 中，不写入源码、浏览器构建或文档。浏览器收到 30 天有效、Secure/HttpOnly/SameSite=Strict 的签名 Cookie，不把原始邀请码存入本地存储；完全离线时不检查网络会话，已完整安装的本地游戏仍可使用。未登录仍可打开启动器，R2 资源下载与更新需要邀请码。
+
+限流发生在 R2 读取之前：每个 Cloudflare 节点对单个来源 IP 的登录尝试最多 5 次/分钟，已授权下载/API 请求最多 600 次/分钟。超限返回 429/Retry-After。限流计数是节点本地、近似计数，不是账号全球费用硬上限；邀请码泄露后应及时轮换，账号的其他 R2 业务也共享免费额度。R2 出站流量免费，读取请求计入 Class B；见 [R2 计费](https://developers.cloudflare.com/r2/pricing/) 和 [限流机制](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
+
+在仓库根目录执行：
+
+```bash
+pnpm pwa:invitation           # 初次创建；已有文件时复用并重新同步
+pnpm pwa:invitation -- --rotate # 轮换，旧会话与旧邀请码随即失效
+```
+
+脚本沿用本机 Wrangler OAuth 和 GitHub 登录，只修改专用 PWA Worker 与个人 fork 的 Environment；邀请码写入仓库外的 `../noname-pwa-invite.txt`，权限 600、归父目录用户所有。通过 SSH 读取 `/home/fengxuwen/noname-pwa-invite.txt`，将其中邀请码私下发送给朋友。不要提交或公开该文件。轮换后朋友重新输入新码，游戏数据不会清除。发布检查使用同一 Secret 登录，再读取状态，不提供绕过鉴权的公开接口。
 
 ## 资源与凭据
 
@@ -46,6 +65,7 @@ pnpm exec tsc -p packages/pwa-host/tsconfig.json
 pnpm exec tsc -p packages/server-worker/tsconfig.json
 NONAME_PWA_VERIFY=0 pnpm build:pwa
 source /tmp/noname-pwa-deploy.env
+export PWA_INVITE_CODE="$(cat ../noname-pwa-invite.txt)"
 export PWA_PUBLIC_ORIGIN=https://play.491528.xyz
 pnpm pwa:plan
 pnpm pwa:publish -- --no-verify
@@ -69,7 +89,7 @@ pnpm deploy:lobby
 
 仅个人 fork `Nineeeeeee/noname-custom-builds` 的 `my-features` 可以发布。首次正式发布可用后，已配置 `pwa-production` Environment：
 
-- Secrets：`CLOUDFLARE_API_TOKEN`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`。
+- Secrets：`CLOUDFLARE_API_TOKEN`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`PWA_INVITE_CODE`。
 - Variable：`PWA_PUBLIC_ORIGIN=https://play.491528.xyz`。
 
 在加载上述临时凭据后运行 `pnpm pwa:configure-actions`。脚本固定个人仓库，将 Secrets 通过标准输入发送给 `gh`，不输出内容。
@@ -90,7 +110,7 @@ pnpm deploy:lobby
 
 Windows、Android、iPhone/iPad 真机安装、存储回收、音频播放和真实内存峰值必须由持有设备者验收。Linux Electron/Chromium 协议检查不能代替 Windows exe 完整混合对局。全部模式和扩展文件均保留，自动加载代码库存不代表每种模式与第三方扩展都完成一场完整对局；依赖 Node、原生插件或外部服务的第三方扩展需要对应环境，PWA 不提供这些能力。
 
-2026-10-05 已执行：13 项自动测试、三个运行时类型检查、修改范围 ESLint、冻结依赖安装和正式全量构建校验均通过。首次全新安装暂停后复用了 85 个已校验文件；浏览器关闭且测试源服务器停止后离线冷启动通过，276 个模式/卡牌/武将/扩展代码文件离线读取通过，两人身份 AI 对局完成 7 轮。真实 ZIP 导入、TS/Vue 编译、模块 Worker 返回 42 通过；两文件差异更新仅请求 2 个对象、共 2453 字节，完整性修复仅请求 1 个对象。配置、录像、图片、音频的游戏数据库记录和用户扩展编辑文件保持不变，无页面脚本异常。
+2026-10-05 已执行：14 项自动测试（含无邀请码、伪造/过期/轮换会话及限流时 R2 调用为零）、三个运行时类型检查、修改范围 ESLint、冻结依赖安装和正式全量构建校验均通过。首次全新安装暂停后复用了 85 个已校验文件；浏览器关闭且测试源服务器停止后离线冷启动通过，276 个模式/卡牌/武将/扩展代码文件离线读取通过，两人身份 AI 对局完成 7 轮。真实 ZIP 导入、TS/Vue 编译、模块 Worker 返回 42 通过；两文件差异更新仅请求 2 个对象、共 2453 字节，完整性修复仅请求 1 个对象。配置、录像、图片、音频的游戏数据库记录和用户扩展编辑文件保持不变，无页面脚本异常。
 
 公网大厅建房、入房、512 KiB 双向转发、权限隔离、65 秒空闲后的 alarm 心跳与继续转发、房主断开清理均通过。实际 Linux Electron 39.8.10 与 PWA 游戏页面的房间及双向协议转发通过；这是协议验证，不等于 Windows 完整混合对局验收。
 

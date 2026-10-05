@@ -20,6 +20,7 @@ async function download(url: string, size: number): Promise<Uint8Array> {
 			const timeout = setTimeout(() => controller.abort(), 120000);
 			try {
 				const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+				if (response.status === 401) throw new Error("邀请码已失效，请返回启动器重新输入");
 				if (response.status === 503) throw new Error("服务器正在维护，请稍后继续");
 				if (response.status === 410) throw new Error("发行版已更新，请重新检查更新");
 				if (!response.ok || response.status === 206) {
@@ -46,7 +47,7 @@ async function download(url: string, size: number): Promise<Uint8Array> {
 				controllers.delete(controller);
 			}
 		} catch (error) {
-			if (cancelled || /维护|发行版/.test(String(error)) || attempt === 4) throw error;
+			if (cancelled || /维护|发行版|邀请码/.test(String(error)) || attempt === 4) throw error;
 			await pause(retryMs || Math.min(1000 * 2 ** attempt, 16000) + Math.random() * 500);
 		}
 	}

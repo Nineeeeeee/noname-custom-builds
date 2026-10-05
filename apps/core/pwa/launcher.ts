@@ -9,6 +9,7 @@ const install = document.querySelector<HTMLButtonElement>("#install")!,
 	play = document.querySelector<HTMLButtonElement>("#play")!,
 	repair = document.querySelector<HTMLButtonElement>("#repair")!,
 	pause = document.querySelector<HTMLButtonElement>("#pause")!;
+const invitation = document.querySelector<HTMLFormElement>("#invitation")!;
 let target: ReleaseManifest | undefined,
 	active: ReleaseManifest | undefined,
 	running = false,
@@ -68,6 +69,15 @@ async function check() {
 	}
 	active = await activeManifest();
 	const state = await onlineState();
+	invitation.hidden = !state?.invitationRequired;
+	if (state?.invitationRequired) {
+		const complete = !!active && (await missingObjects(active)).size === 0;
+		target = undefined;
+		play.disabled = !complete;
+		status.textContent = complete ? "本地完整安装可用；下载和更新需要邀请码" : "请输入朋友提供的邀请码，开始下载完整游戏";
+		detail.textContent = "";
+		return;
+	}
 	if (state?.state === "maintenance") {
 		maintained = true;
 		status.textContent = state.message || "服务器正在维护，请稍后再打开";
@@ -129,6 +139,20 @@ async function start(deep: boolean) {
 		install.disabled = false;
 	}
 }
+invitation.onsubmit = async event => {
+	event.preventDefault();
+	const input = document.querySelector<HTMLInputElement>("#invite-code")!;
+	const button = invitation.querySelector<HTMLButtonElement>("button")!;
+	button.disabled = true;
+	try {
+		const response = await fetch("/__pwa/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: input.value.trim() }) });
+		if (!response.ok) throw new Error((await response.json()).error || "邀请码验证失败");
+		input.value = "";
+		await check();
+	} catch (error) {
+		status.textContent = String(error instanceof Error ? error.message : error);
+	} finally { button.disabled = false; }
+};
 install.onclick = () => start(false);
 repair.onclick = () => start(true);
 pause.onclick = () => worker.postMessage({ type: "cancel" });

@@ -44,6 +44,7 @@ export async function onlineState(): Promise<ReleaseState | null> {
 	const timeout = setTimeout(() => controller.abort(), 5000);
 	try {
 		const response = await fetch("/__pwa/status", { cache: "no-store", signal: controller.signal });
+		if (response.status === 401) return { state: "maintenance", invitationRequired: true, message: "下载和更新需要邀请码" } as ReleaseState;
 		if (!response.ok) return { state: "maintenance", message: "服务器暂不可用，请稍后重试" } as ReleaseState;
 		const state = (await response.json()) as ReleaseState;
 		if (!["ready", "maintenance"].includes(state.state) || state.schemaVersion !== 1 || state.runtimeProtocol !== RUNTIME || state.shellProtocol !== SHELL) return { state: "maintenance", message: "启动器需要更新，请关闭其他游戏窗口后重新打开" } as ReleaseState;

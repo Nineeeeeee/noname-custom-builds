@@ -17,6 +17,7 @@
         "test:pwa": "node --import tsx tests/pwa/run.ts",
         "test:pwa:browser": "tsx tests/pwa/browser.ts",
         "pwa:configure-actions": "tsx scripts/pwa/configure-actions.ts",
+        "pwa:invitation": "tsx scripts/pwa/rotate-invitation.ts",
         "deploy:lobby": "wrangler deploy --config packages/server-worker/wrangler.jsonc"
     },
     "devDependencies": {

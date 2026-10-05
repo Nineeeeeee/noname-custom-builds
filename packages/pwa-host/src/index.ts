@@ -1,6 +1,7 @@
 import { SCHEMA, RUNTIME, SHELL, validHash, validateManifest, sha256, type ReleaseManifest, type ReleaseState } from "../../../apps/core/pwa/protocol";
 import { parseRange } from "../../../apps/core/pwa/range";
-interface Env {
+import { invitationRoute, requireInvitation, type InvitationEnv } from "./invitation";
+interface Env extends InvitationEnv {
 	PWA_BUCKET: R2Bucket;
 	ASSETS: Fetcher;
 	PWA_PREFIX: string;
@@ -35,6 +36,7 @@ export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		if (env.PWA_PREFIX !== "noname-pwa/") return error("Invalid resource prefix", 503);
 		const url = new URL(request.url);
+		if (url.pathname === "/__pwa/auth") return invitationRoute(request, env);
 		if (!["GET", "HEAD"].includes(request.method)) return error("Method not allowed", 405);
 		if (url.pathname === "/" || url.pathname === "/index.html") return Response.redirect(new URL("/launcher.html", url).toString(), 302);
 		if (shell.has(url.pathname)) {
@@ -48,6 +50,14 @@ export default {
 			return new Response(request.method === "HEAD" ? null : asset.body, { status: asset.status, headers });
 		}
 		if (!url.pathname.startsWith("/__pwa/")) return error("Not found", 404);
+		const denied = await requireInvitation(request, env);
+		if (denied) return denied;
+		if (!["/__pwa/status", "/__pwa/manifest"].includes(url.pathname)) {
+			const resource = /^\/__pwa\/(objects|packs)\/([^/]+)$/.exec(url.pathname);
+			if (!resource) return error("Not found", 404);
+			if (!validHash(resource[2])) return error("Invalid hash", 400);
+		}
+		// Authorization and rate limits precede every R2 read, including status.
 		// Always read authoritative maintenance state before the manifest or edge cache.
 		const release = await state(env);
 		if (url.pathname === "/__pwa/status") return Response.json(release, { headers: { "Cache-Control": "no-store" } });

@@ -49,5 +49,6 @@ jobs:
                   CLOUDFLARE_ACCOUNT_ID: d8b2e1f89db7e58447e0ca535a1def7f
                   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
                   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+                  PWA_INVITE_CODE: ${{ secrets.PWA_INVITE_CODE }}
                   PWA_PUBLIC_ORIGIN: ${{ vars.PWA_PUBLIC_ORIGIN }}
                   GH_TOKEN: ${{ github.token }}
