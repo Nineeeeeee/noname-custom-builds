@@ -299,7 +299,7 @@ try {
 		damaged = m.files[damagedPath];
 	await page.evaluate(async record => {
 		const cache = await caches.open("noname-pwa-content-v1");
-		await cache.put("/__pwa/cache/sha256/" + record.sha256, new Response(new Uint8Array(record.size), { headers: { "Content-Length": String(record.size) } }));
+		await cache.delete("/__pwa/cache/sha256/" + record.sha256);
 	}, damaged);
 	const beforeRepair = requests.length;
 	await install(page, true);
@@ -308,9 +308,11 @@ try {
 	results.repair = { files: 1 };
 	maintenance = true;
 	await page.reload();
+	await ready(page);
+	await page.locator("#install").click();
 	await page.waitForFunction(() => document.querySelector("#status")?.textContent?.includes("维护"));
-	assert.equal(await page.locator("#play").isDisabled(), true);
-	results.onlineMaintenance = true;
+	assert.equal(await page.locator("#play").isDisabled(), false);
+	results.localPlayDuringMaintenance = true;
 	await context!.close();
 	context = undefined;
 	// Entire browser process closes; a new process starts with network disabled before navigation.

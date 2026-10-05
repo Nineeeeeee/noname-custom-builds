@@ -12,6 +12,7 @@ export function db(): Promise<IDBDatabase> {
 			for (const name of stores) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
 		};
 		request.onsuccess = () => {
+			request.result.onclose = () => { database = undefined; };
 			request.result.onversionchange = () => {
 				request.result.close();
 				database = undefined;
@@ -24,20 +25,24 @@ export function db(): Promise<IDBDatabase> {
 		};
 	}));
 }
-export async function transaction<T>(names: Store[], action: (tx: IDBTransaction, result: (value: T) => void) => void): Promise<T> {
+export async function transaction<T>(names: Store[], action: (tx: IDBTransaction, result: (value: T) => void, abort: (reason: Error) => void) => void): Promise<T> {
 	const database = await db();
 	return new Promise((resolve, reject) => {
 		const tx = database.transaction(names, "readwrite");
 		let value: T;
+		let reason: Error | undefined;
+		const abort = (error: Error) => {
+			reason = error;
+			tx.abort();
+		};
 		tx.oncomplete = () => resolve(value);
-		tx.onerror = tx.onabort = () => reject(tx.error || new Error("Storage transaction aborted"));
+		tx.onabort = () => reject(reason || tx.error || new Error("浏览器中断了本地写入，请重新打开启动器继续下载"));
 		try {
 			action(tx, result => {
 				value = result;
-			});
+			}, abort);
 		} catch (error) {
-			tx.abort();
-			reject(error);
+			abort(error instanceof Error ? error : new Error(String(error)));
 		}
 	});
 }
@@ -110,14 +115,20 @@ export interface Lease {
 	generation: number;
 	expires: number;
 }
+export class LeaseBusyError extends Error {
+	constructor() { super("另一个窗口正在下载或清理文件，请稍后再试"); this.name = "LeaseBusyError"; }
+}
+export class LeaseLostError extends Error {
+	constructor() { super("下载已被另一个窗口接管，请在当前窗口重新点击继续下载"); this.name = "LeaseLostError"; }
+}
 export async function acquireLease(owner: string): Promise<Lease> {
-	return transaction(["locks"], (tx, result) => {
+	return transaction(["locks"], (tx, result, abort) => {
 		const store = tx.objectStore("locks");
 		const r = store.get("install");
 		r.onsuccess = () => {
 			const old = r.result as Lease | undefined;
 			if (old && old.owner !== owner && old.expires > Date.now()) {
-				tx.abort();
+				abort(new LeaseBusyError());
 				return;
 			}
 			const lease = { owner, generation: (old?.generation || 0) + 1, expires: Date.now() + 60000 };
@@ -127,17 +138,23 @@ export async function acquireLease(owner: string): Promise<Lease> {
 	});
 }
 export async function withLease<T>(lease: Lease, stores: Store[], action: (tx: IDBTransaction, result: (value: T) => void) => void): Promise<T> {
-	return transaction(["locks", ...stores], (tx, result) => {
+	return transaction(["locks", ...stores], (tx, result, abort) => {
 		const r = tx.objectStore("locks").get("install");
 		r.onsuccess = () => {
 			const current = r.result as Lease | undefined;
-			if (!current || current.owner !== lease.owner || current.generation !== lease.generation || current.expires < Date.now()) {
-				tx.abort();
+			// Expiration allows another installer to take over. A suspended worker
+			// can still renew its own lease if nobody actually took ownership.
+			if (!current || current.owner !== lease.owner || current.generation !== lease.generation) {
+				abort(new LeaseLostError());
 				return;
 			}
 			current.expires = Date.now() + 60000;
 			tx.objectStore("locks").put(current, "install");
-			action(tx, result);
+			try {
+				action(tx, result);
+			} catch (error) {
+				abort(error instanceof Error ? error : new Error(String(error)));
+			}
 		};
 	});
 }
@@ -149,19 +166,13 @@ export async function releaseLease(lease: Lease) {
 		tx.objectStore("locks").delete("install");
 	}).catch(() => {});
 }
-export async function missingObjects(manifest: ReleaseManifest, deep = false, progress?: (done: number, total: number) => void): Promise<Set<string>> {
+export async function missingObjects(manifest: ReleaseManifest): Promise<Set<string>> {
 	const cache = await caches.open(CONTENT_CACHE);
 	const keys = new Set((await cache.keys()).map(r => r.url));
 	const missing = new Set<string>();
 	const unique = [...new Map(Object.values(manifest.files).map(f => [f.sha256, f])).values()];
-	let done = 0;
 	for (const f of unique) {
 		if (!keys.has(objectKey(f.sha256))) missing.add(f.sha256);
-		else if (deep) {
-			const r = await cache.match(objectKey(f.sha256));
-			if (!r || Number(r.headers.get("content-length")) !== f.size || (await sha256(await r.arrayBuffer())) !== f.sha256) missing.add(f.sha256);
-		}
-		if (++done % 100 === 0) progress?.(done, unique.length);
 	}
 	return missing;
 }

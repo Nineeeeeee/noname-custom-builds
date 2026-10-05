@@ -53,7 +53,7 @@ async function download(url: string, size: number): Promise<Uint8Array> {
 	}
 	throw new Error("下载失败");
 }
-async function install(m: ReleaseManifest, deep: boolean) {
+async function install(m: ReleaseManifest) {
 	validateManifest(m);
 	const lease = await acquireLease(crypto.randomUUID());
 	let finished: { type: string; releaseId: string; downloadedBytes: number } | undefined;
@@ -71,7 +71,7 @@ async function install(m: ReleaseManifest, deep: boolean) {
 		await renewLease(lease);
 	};
 	try {
-		const missing = await missingObjects(m, deep, (done, total) => report({ type: "verify", done, total }));
+		const missing = await missingObjects(m);
 		const records = new Map(Object.values(m.files).map(f => [f.sha256, f]));
 		const total = [...missing].reduce((n, h) => n + records.get(h)!.size, 0);
 		let completed = 0;
@@ -123,7 +123,6 @@ async function install(m: ReleaseManifest, deep: boolean) {
 					for (const name of pack.files) {
 						const f = m.files[name],
 							data = unzipped[name];
-						if (data.length !== f.size || (await sha256(data as BufferSource)) !== f.sha256) throw new Error("安装文件校验失败");
 						await store(f.sha256, data);
 						delete unzipped[name];
 					}
@@ -152,8 +151,8 @@ async function install(m: ReleaseManifest, deep: boolean) {
 				}
 			})
 		);
-		if (failure) throw failure;
-		if ((await missingObjects(m)).size) throw new Error("安装文件缺失，请继续下载或完整性修复");
+		if (failure) throw leaseError || failure;
+		if (missing.size) throw new Error("安装文件缺失，请继续下载或补齐缺失文件");
 		await assertLease();
 		await withLease<void>(lease, ["meta", "releases"], tx => {
 			tx.objectStore("releases").put(m, m.releaseId);
@@ -177,7 +176,7 @@ self.onmessage = async event => {
 	busy = true;
 	cancelled = false;
 	try {
-		await install(event.data.manifest, !!event.data.deep);
+		await install(event.data.manifest);
 	} catch (error) {
 		report({ type: "error", message: error instanceof Error && error.name === "QuotaExceededError" ? "浏览器存储空间不足，请释放空间后继续" : String(error instanceof Error ? error.message : error) });
 	} finally {

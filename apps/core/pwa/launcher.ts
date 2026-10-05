@@ -22,12 +22,7 @@ worker.onmessage = async e => {
 	if (data.type === "progress") {
 		progress.value = data.total ? (data.completed / data.total) * 100 : 100;
 		status.textContent = "正在下载完整游戏内容…";
-		detail.textContent = `${mb(data.completed)} / ${mb(data.total)}，已校验文件会保留`;
-	}
-	if (data.type === "verify") {
-		status.textContent = "正在检查完整性…";
-		progress.value = (data.done / data.total) * 100;
-		detail.textContent = `已检查 ${data.done} / ${data.total} 个文件`;
+		detail.textContent = `${mb(data.completed)} / ${mb(data.total)}，已下载文件会保留`;
 	}
 	if (data.type === "complete") {
 		downloaded = data.downloadedBytes;
@@ -46,8 +41,9 @@ worker.onmessage = async e => {
 	if (data.type === "error") {
 		running = false;
 		pause.hidden = true;
+		play.disabled = !active;
 		status.textContent = data.message;
-		detail.textContent = "已校验文件保留，重试会继续下载。";
+		detail.textContent = "已下载文件保留，重试会继续下载。";
 		install.disabled = false;
 		install.textContent = "继续下载 / 检查更新";
 		repair.disabled = false;
@@ -130,18 +126,18 @@ async function check(updates = false) {
 		install.textContent = active ? "继续下载 / 更新" : "完整下载";
 	}
 }
-async function start(deep: boolean) {
+async function start(repairMissing: boolean) {
 	if (running) return;
 	try {
 		await check(true);
 		if (maintained || !target) return;
-		if (!deep && active?.releaseId === target.releaseId) return;
+		if (!repairMissing && active?.releaseId === target.releaseId) return;
 		const persistent = await navigator.storage?.persist?.().catch(() => false);
 		if (!persistent) detail.textContent = "浏览器未授予持久存储，请保留足够空间和本站数据";
 		running = true;
 		install.disabled = play.disabled = repair.disabled = true;
 		pause.hidden = false;
-		worker.postMessage({ type: "install", manifest: target, deep });
+		worker.postMessage({ type: "install", manifest: target });
 	} catch (error) {
 		status.textContent = String(error instanceof Error ? error.message : error);
 		install.disabled = false;

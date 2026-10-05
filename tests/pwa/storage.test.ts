@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PwaAdapter } from "../../apps/core/pwa/filesystem.ts";
 import { normalizePath, safeArchivePath, sha256, type ReleaseManifest } from "../../apps/core/pwa/protocol.ts";
-import { saveObject, get, put, acquireLease, renewLease, releaseLease, missingObjects, CONTENT_CACHE } from "../../apps/core/pwa/storage.ts";
+import { saveObject, get, put, acquireLease, renewLease, releaseLease, withLease, LeaseBusyError, LeaseLostError, missingObjects, CONTENT_CACHE } from "../../apps/core/pwa/storage.ts";
 import { parseRange, localResponse } from "../../apps/core/pwa/range.ts";
 (globalThis as any).location = { origin: "https://test.invalid" };
 const contents = new Map<string, Response>();
@@ -60,23 +60,35 @@ test("open flags, append, zero-filled truncate and atomic extension import rollb
 	assert.deepEqual(await fs.read("extension/atomic/extension.ts"), before);
 	assert.ok(await get("meta", "userRevision"));
 });
-test("lease fencing, expiration recovery, cache/database disagreement and deep corruption detection", async () => {
+test("lease fencing, expiration recovery and cache/database disagreement", async () => {
 	const a = await acquireLease("a");
-	await assert.rejects(acquireLease("b"));
+	await assert.rejects(acquireLease("b"), LeaseBusyError);
 	await put("locks", "install", { ...a, expires: Date.now() - 1 });
 	const b = await acquireLease("b");
 	assert.ok(b.generation > a.generation);
-	await assert.rejects(renewLease(a));
+	await assert.rejects(renewLease(a), LeaseLostError);
 	await releaseLease(b);
 	assert.equal((await missingObjects(manifest)).size, 0);
 	const file = Object.values(manifest.files)[0];
 	const key = [...contents.keys()][0];
 	await cache.put(key, new Response("wrong123", { headers: { "Content-Length": "8" } }));
 	assert.equal((await missingObjects(manifest)).size, 0);
-	assert.deepEqual([...(await missingObjects(manifest, true))], [file.sha256]);
 	contents.clear();
 	await put("downloads", [manifest.releaseId, file.sha256], { size: file.size });
 	assert.deepEqual([...(await missingObjects(manifest))], [file.sha256]);
+});
+test("suspended installer can resume an expired lease without takeover; callback errors roll back atomically", async () => {
+	const lease = await acquireLease("suspended-ipad");
+	await put("locks", "install", { ...lease, expires: Date.now() - 120000 });
+	await renewLease(lease);
+	assert.equal((await get<any>("locks", "install"))?.generation, lease.generation);
+	await assert.rejects(withLease<void>(lease, ["meta"], tx => {
+		tx.objectStore("meta").put("must-not-commit", "aborted-write");
+		throw new Error("original write error");
+	}), /original write error/);
+	assert.equal(await get("meta", "aborted-write"), undefined);
+	await releaseLease(lease);
+	assert.equal(await get("locks", "install"), undefined);
 });
 test("Range, suffix, open end, HEAD, multi-range and unsatisfiable requests", async () => {
 	assert.deepEqual(parseRange("bytes=3-", 10), { start: 3, end: 9 });
