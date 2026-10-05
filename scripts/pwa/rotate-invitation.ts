@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { releaseConfig as config } from "./release-config";
-const args = process.argv.slice(2);
+const args = process.argv.slice(2).filter(arg => arg !== "--");
 if (args.some(a => a !== "--rotate")) throw new Error("Use --rotate to replace the current invitation");
 const repo = execFileSync("gh", ["api", `repos/${config.repository}`, "--jq", ".full_name"], { encoding: "utf8" }).trim();
 if (repo !== config.repository) throw new Error("Unexpected invitation repository");
