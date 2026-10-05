@@ -1,0 +1,8 @@
+{
+	"name": "@noname/pwa-host",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"lint": "tsc -p tsconfig.json"
+	}
+}

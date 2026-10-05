@@ -164,14 +164,14 @@ export const otherMenu = function (/** @type { boolean | undefined } */ connectM
 		var li3 = document.createElement("li");
 		const buildLabel = formatBuildLabel(lib.buildInfo);
 		li1.textContent = `游戏版本：${lib.version}${buildLabel ? ` (${buildLabel})` : ""}`;
-		li3.innerHTML = '由于无名杀正在重构项目结构，在线更新暂时无法使用，请访问github主页获取最新版本。';
+		li3.textContent = lib.pwa ? '通过离线启动器检查更新和修复文件，保留配置与用户内容。' : '由于无名杀正在重构项目结构，在线更新暂时无法使用，请访问github主页获取最新版本。';
 
 		/** @type { HTMLParagraphElement } */
 		var updatepx = ui.create.node("p");
 		updatepx.style.whiteSpace = "nowrap";
 		updatepx.style.marginTop = "8px";
-		var buttonx = ui.create.node("button", "访问项目主页", function () {
-			window.open("https://github.com/libnoname/noname");
+		var buttonx = ui.create.node("button", lib.pwa ? "打开离线启动器" : "访问项目主页", function () {
+			if (lib.pwa) { if (confirm("返回启动器会结束当前游戏，是否继续？")) { window.onbeforeunload = null; location.href = "/launcher.html"; } } else window.open("https://github.com/libnoname/noname");
 		});
 		updatepx.appendChild(buttonx);
 

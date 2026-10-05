@@ -1,0 +1,32 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { RawResourceStrategy, WorkerResourceStrategy, TSStrategy, VueSFCStrategy, CSSStrategy, JSONStrategy } from "../../packages/jit/src/service-worker/compile-strategy.ts";
+const ctx = (path: string, source: string) => ({ url: new URL("https://offline.invalid/" + path), request: new Request("https://offline.invalid/" + path), event: {} as FetchEvent, readSource: async () => new Response(source) });
+test("local compiler handles escaped raw strings, worker flags and TypeScript without network", async () => {
+	const raw = await new RawResourceStrategy().process(ctx("ext/a.txt?raw", 'hello ` ${oops}\n"quoted"'));
+	assert.equal(await raw.text(), 'export default "hello ` ${oops}\\n\\"quoted\\""');
+	const ts = await new TSStrategy({}).process(ctx("ext/a.ts", "export const value: number = 42;"));
+	assert.ok((await ts.text()).includes("export const value = 42"));
+	const mapped = ctx("ext/mapped.ts", 'import { lib } from "noname"; export default lib;');
+	const output = await (await new TSStrategy({}).process({ ...mapped, importMap: { noname: "/noname.js" } })).text();
+	assert.ok(output.includes("/noname.js"));
+	const worker = await new WorkerResourceStrategy().process(ctx("ext/a.ts?sharedworker&module", ""));
+	const text = await worker.text();
+	assert.ok(text.includes("SharedWorker"));
+	assert.ok(text.includes('delete("sharedworker")'));
+});
+test("Vue child compilation can recover after worker restart; style strings and multiple blocks", async () => {
+	const source = '<script setup lang="ts">const count: number = 1</script><template><b>{{count}}</b></template><style scoped>b{color:red}</style><style>b{background:black}</style>';
+	const vue = new VueSFCStrategy();
+	const main = await (await vue.process(ctx("ext/test.vue", source))).text();
+	assert.ok(main.includes("render"));
+	assert.ok(main.includes("let el0"));
+	assert.ok(main.includes("let el1"));
+	const afterRestart = new VueSFCStrategy();
+	const child = await (await afterRestart.process(ctx("ext/test.vue?type=script", source))).text();
+	assert.ok(child.includes("export const __sfc_main__"));
+	const stylesheet = ctx("ext/a.css", "b{}");
+	assert.equal(new CSSStrategy().match(stylesheet), false);
+	const json = ctx("data.json", "{}");
+	assert.equal(new JSONStrategy().match(json), false);
+});

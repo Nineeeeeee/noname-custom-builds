@@ -3338,36 +3338,39 @@ ${e instanceof Error ? e.stack : String(e)}`);
 			if (lib.config.all.plays.includes(name)) {
 				throw new Error("禁止安装游戏原生扩展");
 			}
+			if (game.pwaInstallExtension) {
+				await game.pwaInstallExtension(name, zip);
+			} else {
+				const targetDir = `extension/${name}`;
+				const tasks = [];
+				for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+					const outputPath = lib.path.join(targetDir, relativePath);
+
+					if (zipEntry.dir) {
+						// 目录：确保存在
+						tasks.push(game.promises.createDir(outputPath));
+					} else {
+						// 文件：先创建父目录，再写文件
+						const task = (async () => {
+							await game.promises.createDir(lib.path.dirname(outputPath));
+
+							const content = zipEntry.asArrayBuffer();
+							await game.promises.writeFile(content, "./", outputPath);
+						})();
+
+						tasks.push(task);
+					}
+				}
+				await Promise.all(tasks);
+			}
 			const extensions = lib.config.extensions;
 			if (extensions.includes(name)) {
-				game.removeExtension(name, true);
+				if (!game.pwaInstallExtension) game.removeExtension(name, true);
 			}
 			extensions.add(name);
 			game.saveConfigValue("extensions");
 			game.saveConfig(`extension_${name}_enable`, true);
 			delete game.importedPack;
-
-			const targetDir = `extension/${name}`;
-			const tasks = [];
-			for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
-				const outputPath = lib.path.join(targetDir, relativePath);
-
-				if (zipEntry.dir) {
-					// 目录：确保存在
-					tasks.push(game.promises.createDir(outputPath));
-				} else {
-					// 文件：先创建父目录，再写文件
-					const task = (async () => {
-						await game.promises.createDir(lib.path.dirname(outputPath));
-
-						const content = zipEntry.asArrayBuffer();
-						await game.promises.writeFile(content, "./", outputPath);
-					})();
-
-					tasks.push(task);
-				}
-			}
-			await Promise.all(tasks);
 
 			if (typeof finishLoad == "function") {
 				finishLoad();

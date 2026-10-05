@@ -1,0 +1,164 @@
+import { validateManifest, sha256, type ReleaseManifest } from "./protocol";
+import { activeManifest, missingObjects } from "./storage";
+import { ensureController, onlineState, workerMessage } from "./client";
+declare const __LOBBY_URL__: string;
+const status = document.querySelector("#status")!,
+	detail = document.querySelector("#detail")!;
+const progress = document.querySelector<HTMLProgressElement>("#progress")!;
+const install = document.querySelector<HTMLButtonElement>("#install")!,
+	play = document.querySelector<HTMLButtonElement>("#play")!,
+	repair = document.querySelector<HTMLButtonElement>("#repair")!,
+	pause = document.querySelector<HTMLButtonElement>("#pause")!;
+let target: ReleaseManifest | undefined,
+	active: ReleaseManifest | undefined,
+	running = false,
+	maintained = false;
+let downloaded = 0;
+const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1) + " MB";
+const worker = new Worker("/pwa/download-worker.js");
+worker.onmessage = async e => {
+	const data = e.data;
+	if (data.type === "progress") {
+		progress.value = data.total ? (data.completed / data.total) * 100 : 100;
+		status.textContent = "正在下载完整游戏内容…";
+		detail.textContent = `${mb(data.completed)} / ${mb(data.total)}，已校验文件会保留`;
+	}
+	if (data.type === "verify") {
+		status.textContent = "正在检查完整性…";
+		progress.value = (data.done / data.total) * 100;
+		detail.textContent = `已检查 ${data.done} / ${data.total} 个文件`;
+	}
+	if (data.type === "complete") {
+		downloaded = data.downloadedBytes;
+		running = false;
+		pause.hidden = true;
+		active = await activeManifest();
+		await workerMessage({ type: "gc" }).catch(console.error);
+		status.textContent = "完整安装已就绪，可以离线游玩";
+		detail.textContent = `游戏 ${active?.gameVersion} · 本次下载 ${mb(downloaded)}`;
+		play.disabled = false;
+		install.disabled = false;
+		install.textContent = "检查更新";
+		repair.disabled = false;
+		progress.value = 100;
+	}
+	if (data.type === "error") {
+		running = false;
+		pause.hidden = true;
+		status.textContent = data.message;
+		detail.textContent = "已校验文件保留，重试会继续下载。";
+		install.disabled = false;
+		install.textContent = "继续下载 / 检查更新";
+		repair.disabled = false;
+	}
+};
+async function check() {
+	install.disabled = play.disabled = repair.disabled = true;
+	maintained = false;
+	const registration = await ensureController();
+	if (registration.waiting) {
+		const result = await workerMessage<{ activated: boolean }>({ type: "activate" }, registration.waiting);
+		if (result.activated) {
+			location.reload();
+			return;
+		}
+		status.textContent = "启动器有更新，请先关闭其他游戏窗口";
+		install.disabled = false;
+		return;
+	}
+	active = await activeManifest();
+	const state = await onlineState();
+	if (state?.state === "maintenance") {
+		maintained = true;
+		status.textContent = state.message || "服务器正在维护，请稍后再打开";
+		install.disabled = false;
+		install.textContent = "重新检查";
+		return;
+	}
+	if (state) {
+		const response = await fetch(`/__pwa/manifest?releaseId=${encodeURIComponent(state.releaseId)}`, { cache: "no-store" });
+		if (!response.ok) throw new Error("发行内容暂不可用，请稍后重试");
+		const bytes = await response.arrayBuffer();
+		if ((await sha256(bytes)) !== state.manifestSha256) throw new Error("发行清单校验失败");
+		target = JSON.parse(new TextDecoder().decode(bytes));
+		validateManifest(target!);
+	} else {
+		target = active;
+	}
+	const missing = active ? await missingObjects(active) : new Set(["uninstalled"]);
+	const complete = !!active && missing.size === 0;
+	play.disabled = !complete || (!!state && active!.releaseId !== state.releaseId);
+	repair.disabled = !target;
+	install.disabled = !target;
+	if (!state && !complete) {
+		status.textContent = "尚未完整安装，请联网完成下载";
+		detail.textContent = "";
+		return;
+	}
+	if (!state) {
+		status.textContent = "当前离线，本地完整安装可用";
+		detail.textContent = `游戏 ${active!.gameVersion}`;
+		install.disabled = true;
+		return;
+	}
+	if (complete && active!.releaseId === target!.releaseId) {
+		status.textContent = "完整安装已就绪，可以离线游玩";
+		detail.textContent = `游戏 ${active!.gameVersion}`;
+		install.textContent = "检查更新";
+		progress.value = 100;
+	} else {
+		status.textContent = active ? "发现更新或缺失文件，完成下载后即可进入" : "准备安装完整游戏";
+		detail.textContent = `游戏 ${target!.gameVersion} · 全量内容 ${mb(target!.totalBytes)}`;
+		install.textContent = active ? "继续下载 / 更新" : "完整下载";
+	}
+}
+async function start(deep: boolean) {
+	if (running) return;
+	try {
+		await check();
+		if (maintained || !target) return;
+		if (!deep && active?.releaseId === target.releaseId && (await missingObjects(target)).size === 0) return;
+		const persistent = await navigator.storage?.persist?.().catch(() => false);
+		if (!persistent) detail.textContent = "浏览器未授予持久存储，请保留足够空间和本站数据";
+		running = true;
+		install.disabled = play.disabled = repair.disabled = true;
+		pause.hidden = false;
+		worker.postMessage({ type: "install", manifest: target, deep });
+	} catch (error) {
+		status.textContent = String(error instanceof Error ? error.message : error);
+		install.disabled = false;
+	}
+}
+install.onclick = () => start(false);
+repair.onclick = () => start(true);
+pause.onclick = () => worker.postMessage({ type: "cancel" });
+play.onclick = async () => {
+	try {
+		await check();
+		if (play.disabled || !active) return;
+		await workerMessage({ type: "pin", releaseId: active.releaseId });
+		location.href = `/index.html?release=${encodeURIComponent(active.releaseId)}`;
+	} catch (error) {
+		status.textContent = String(error);
+	}
+};
+let addEvent: any;
+window.addEventListener("beforeinstallprompt", (event: any) => {
+	event.preventDefault();
+	addEvent = event;
+	document.querySelector<HTMLButtonElement>("#add")!.hidden = false;
+});
+document.querySelector<HTMLButtonElement>("#add")!.onclick = async () => {
+	await addEvent?.prompt();
+};
+document.querySelector("#lobby")!.textContent = `联机大厅：${__LOBBY_URL__}`;
+document.addEventListener("visibilitychange", () => {
+	if (!document.hidden && !running)
+		check().catch(error => {
+			status.textContent = String(error);
+		});
+});
+check().catch(error => {
+	status.textContent = String(error instanceof Error ? error.message : error);
+	install.disabled = false;
+});

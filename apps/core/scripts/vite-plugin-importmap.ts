@@ -31,6 +31,11 @@ export default function vitePluginJIT(importMap: Record<string, string> = {}): P
 
 		closeBundle() {
 			const gameJs = path.resolve("dist/game/game.js");
+			if (process.env.NONAME_TARGET === "pwa") {
+				fs.mkdirSync(path.dirname(gameJs), { recursive: true });
+				fs.writeFileSync(gameJs, `const im = document.createElement("script"); im.type = "importmap"; im.textContent = ${JSON.stringify(JSON.stringify({ imports: resolvedImportMap }))}; document.head.appendChild(im); const entry = document.createElement("script"); entry.type = "module"; entry.src = "/noname/entry.js"; document.head.appendChild(entry);`);
+				return;
+			}
 			fs.mkdirSync(path.dirname(gameJs), { recursive: true });
 			fs.writeFileSync(
 				gameJs,
@@ -130,21 +135,27 @@ export default function vitePluginJIT(importMap: Record<string, string> = {}): P
 			);
 		},
 
-		transformIndexHtml(html) {
-			if (!isBuild) return;
-			return {
-				html,
-				tags: [
-					{
-						tag: "script",
-						attrs: {
-							type: "importmap",
+		transformIndexHtml: {
+			order: "post",
+			handler(html) {
+				if (!isBuild) return;
+				if (process.env.NONAME_TARGET === "pwa") {
+					html = html.replace(/(<script[^>]*\bsrc=)(["'])([^"']+)\2/g, (match, prefix, quote, src) => (resolvedImportMap[src] ? prefix + quote + resolvedImportMap[src] + quote : match));
+				}
+				return {
+					html,
+					tags: [
+						{
+							tag: "script",
+							attrs: {
+								type: "importmap",
+							},
+							children: JSON.stringify({ imports: resolvedImportMap }, null, 2),
+							injectTo: "head-prepend",
 						},
-						children: JSON.stringify({ imports: resolvedImportMap }, null, 2),
-						injectTo: "head-prepend",
-					},
-				],
-			};
+					],
+				};
+			},
 		},
 	};
 }

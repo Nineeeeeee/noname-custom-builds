@@ -52,10 +52,11 @@ export async function importMode(name: string) {
 }
 
 async function importFunction(type: "card" | "character" | "extension" | "mode", path: string): Promise<void> {
-	const modeContent = await import(/* @vite-ignore */ path + ".js").catch(async e => {
+	const revision = (game as any).pwaFileRevision && path.startsWith("/extension/") ? "?pwa_rev=" + encodeURIComponent(await (game as any).pwaFileRevision()) : "";
+	const modeContent = await import(/* @vite-ignore */ path + ".js" + revision).catch(async e => {
 		if (window.isSecureContext) {
 			try {
-				return await import(/* @vite-ignore */ path + ".ts");
+				return await import(/* @vite-ignore */ path + ".ts" + revision);
 			} catch {
 				throw e;
 			}

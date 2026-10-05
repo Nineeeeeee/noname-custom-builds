@@ -121,6 +121,7 @@ async function main() {
 	}
 
 	writeBuildInfo();
+	if (process.env.NONAME_TARGET === "pwa") { const { buildShell } = await import("../../../scripts/pwa/shell.ts"); await buildShell(join(root, "dist")); }
 }
 
 /**
@@ -161,7 +162,7 @@ async function buildSelf(target: string | string[], importMap: Record<string, st
 				},
 			},
 		},
-		plugins: [viteStaticCopy({ targets: copies }), generateImportMap(importMap), jit()],
+		plugins: [viteStaticCopy({ targets: copies }), generateImportMap(importMap), ...(process.env.NONAME_TARGET === "pwa" ? [] : [jit()])],
 	});
 }
 

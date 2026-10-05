@@ -12,7 +12,7 @@ import "vue/dist/vue.esm-browser.js";
 
 		// 预加载脚本
 		const path = "/preload.js";
-		const { default: preload } = await import(/* @vite-ignore */ path).catch(() => {
+		const { default: preload } = import.meta.env.NONAME_PWA ? await import("./init/pwa") : await import(/* @vite-ignore */ path).catch(() => {
 			// Electron平台
 			if (typeof window.require === "function") {
 				return import("./init/node.js");

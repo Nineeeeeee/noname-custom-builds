@@ -9,17 +9,32 @@
         "serve": "pnpm -F @noname/fs dev --dirname=../../dist",
         "start": "pnpm build && pnpm serve",
         "generateTestPack": "pnpm build && tsx scripts/generateTestPack.ts",
-        "lint": "pnpm -r lint"
+        "lint": "pnpm -r lint",
+        "build:pwa": "tsx scripts/pwa/build.ts",
+        "pwa:verify": "tsx scripts/pwa/verify.ts",
+        "pwa:publish": "tsx scripts/pwa/publish.ts",
+        "pwa:plan": "tsx scripts/pwa/publish.ts --plan",
+        "test:pwa": "node --import tsx tests/pwa/run.ts",
+        "test:pwa:browser": "tsx tests/pwa/browser.ts",
+        "pwa:configure-actions": "tsx scripts/pwa/configure-actions.ts",
+        "deploy:lobby": "wrangler deploy --config packages/server-worker/wrangler.jsonc"
     },
     "devDependencies": {
+        "@aws-sdk/client-s3": "3.1146.0",
+        "@cloudflare/workers-types": "5.20261004.1",
         "@eslint/js": "^9.39.2",
+        "@playwright/test": "1.63.0",
         "@types/minimist": "^1.2.5",
         "@types/node": "^25.2.3",
         "concurrently": "^9.2.1",
         "cross-env": "^10.1.0",
+        "esbuild": "0.28.2",
         "eslint": "^9.39.2",
         "eslint-plugin-vue": "^10.7.0",
+        "fake-indexeddb": "6.2.5",
+        "fflate": "0.8.2",
         "globals": "^17.3.0",
+        "https-proxy-agent": "7.0.6",
         "minimist": "^1.2.8",
         "prettier": "^3.8.1",
         "terser": "^5.46.0",
@@ -27,6 +42,8 @@
         "tsx": "^4.21.0",
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.55.0",
+        "undici": "7.16.0",
         "vue-eslint-parser": "^10.3.0"
-    }
+    },
+    "packageManager": "pnpm@9.15.9"
 }

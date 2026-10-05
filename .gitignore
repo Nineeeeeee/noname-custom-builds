@@ -27,3 +27,8 @@ Thumbs.db
 
 # Skill for private use
 .agents/skills/*-selfuse
+
+# Local Workers emulation and deployment credentials
+.wrangler/
+.dev.vars
+.env.pwa*

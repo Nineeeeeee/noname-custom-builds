@@ -60,6 +60,12 @@ async function initializeSandboxRealms(enabled) {
 	// 然后就可以直接冻结当前变量域的原型链
 	const iframe = createElement("iframe");
 	iframe.style.display = "none";
+	// A same-origin document ensures the PWA worker controls the sandbox's modules.
+	// Keep the synchronous secondary realm factory below unchanged.
+	if (import.meta.env.NONAME_PWA) {
+		const release = new URL(location.href).searchParams.get("release");
+		iframe.src = "/pwa/realm.html" + (release ? "?release=" + encodeURIComponent(release) : "");
+	}
 	const firefoxLoaded = new Promise(resolve => {
 		iframe.onload = resolve;
 	});

@@ -8,6 +8,7 @@ const port = {
 
 export default defineConfig({
 	appType: "mpa",
+	define: { "import.meta.env.NONAME_PWA": JSON.stringify(process.env.NONAME_TARGET === "pwa"), "__LOBBY_URL__": JSON.stringify(process.env.NONAME_LOBBY_URL || "wss://lobby.491528.xyz") },
 	root: ".",
 	base: "./",
 	resolve: {

@@ -1,0 +1,12 @@
+{
+	"name": "noname-pwa-host",
+	"main": "src/index.ts",
+	"account_id": "d8b2e1f89db7e58447e0ca535a1def7f",
+	"compatibility_date": "2026-10-05",
+	"workers_dev": true,
+	"preview_urls": false,
+	"routes": [{ "pattern": "play.491528.xyz", "custom_domain": true }],
+	"r2_buckets": [{ "binding": "PWA_BUCKET", "bucket_name": "noname-pwa" }],
+	"assets": { "directory": "../../output/pwa/shell", "binding": "ASSETS", "html_handling": "none", "not_found_handling": "none", "run_worker_first": true },
+	"vars": { "PWA_PREFIX": "noname-pwa/" },
+}

@@ -1,0 +1,35 @@
+name: Publish Cloudflare lobby
+# Lobby code deployments close live WebSockets. Deploy independently, between games.
+on:
+    workflow_dispatch:
+permissions:
+    contents: read
+concurrency:
+    group: noname-lobby-production
+    cancel-in-progress: false
+jobs:
+    deploy:
+        if: github.repository == 'Nineeeeeee/noname-custom-builds' && github.ref == 'refs/heads/my-features'
+        runs-on: ubuntu-latest
+        environment: pwa-production
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+            - uses: pnpm/action-setup@v5
+              with:
+                  version: 9.15.9
+                  run_install: false
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24.13.0
+                  cache: pnpm
+                  cache-dependency-path: "**/pnpm-lock.yaml"
+            - run: pnpm install --frozen-lockfile
+            - run: npm install --global wrangler@4.147.0
+            - run: pnpm test:pwa
+            - run: pnpm exec tsc -p packages/server-worker/tsconfig.json
+            - run: pnpm deploy:lobby
+              env:
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  CLOUDFLARE_ACCOUNT_ID: d8b2e1f89db7e58447e0ca535a1def7f

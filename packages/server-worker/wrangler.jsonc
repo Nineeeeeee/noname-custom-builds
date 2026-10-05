@@ -1,0 +1,28 @@
+{
+	"name": "noname-lobby-host",
+	"main": "src/index.ts",
+	"account_id": "d8b2e1f89db7e58447e0ca535a1def7f",
+	"compatibility_date": "2026-10-05",
+	"workers_dev": true,
+	"preview_urls": false,
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "NONAME_LOBBY",
+				"class_name": "NonameLobby",
+			},
+		],
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["NonameLobby"],
+		},
+	],
+	"routes": [
+		{
+			"pattern": "lobby.491528.xyz",
+			"custom_domain": true,
+		},
+	],
+}

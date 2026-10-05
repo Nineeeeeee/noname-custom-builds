@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+		<meta name="theme-color" content="#17110b" />
+		<title>无名杀 · 离线客户端</title>
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="/pwa/icon-180.png" />
+		<link rel="icon" href="/pwa/icon-192.png" />
+		<style>
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: #17110b;
+				color: #f5dfbb;
+				font:
+					16px/1.7 system-ui,
+					sans-serif;
+				min-height: 100vh;
+				display: grid;
+				place-items: center;
+				padding: 24px;
+			}
+			main {
+				max-width: 580px;
+				width: 100%;
+				border: 1px solid #725936;
+				padding: 32px;
+				border-radius: 18px;
+				background: #241a12;
+			}
+			header {
+				display: flex;
+				align-items: center;
+				gap: 20px;
+			}
+			img {
+				width: 76px;
+				height: 76px;
+			}
+			h1 {
+				font-size: 28px;
+				margin: 0;
+			}
+			p {
+				color: #ccb89c;
+			}
+			#status {
+				min-height: 54px;
+				color: #f5dfbb;
+			}
+			progress {
+				width: 100%;
+				height: 18px;
+				accent-color: #d2ad63;
+			}
+			button {
+				background: #d2ad63;
+				color: #241a12;
+				border: 0;
+				border-radius: 8px;
+				padding: 11px 18px;
+				margin: 8px 8px 0 0;
+				font: inherit;
+				cursor: pointer;
+			}
+			button.secondary {
+				background: #3b2b1d;
+				color: #efd7b4;
+			}
+			button:disabled {
+				opacity: 0.45;
+				cursor: default;
+			}
+			small {
+				color: #a99274;
+			}
+			a {
+				color: #d2ad63;
+			}
+			#detail {
+				overflow-wrap: anywhere;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<header>
+				<img src="/pwa/icon-192.png" alt="" />
+				<div>
+					<h1>无名杀</h1>
+					<div>完整离线客户端</div>
+				</div>
+			</header>
+			<p>一次下载全部游戏内容，之后断网也能单机游玩。联机需要网络。</p>
+			<div id="status" role="status">正在检查本地安装…</div>
+			<progress id="progress" max="100" value="0"></progress>
+			<p id="detail"></p>
+			<div><button id="install" disabled>完整下载</button><button id="play" disabled>进入游戏</button><button id="repair" class="secondary" disabled>完整性检查与修复</button><button id="pause" class="secondary" hidden>暂停下载</button><button id="add" class="secondary" hidden>安装到桌面</button></div>
+			<p><small>建议预留至少 3 GB 空间。下载中断后可继续；更新保留配置、录像、自定义素材和用户扩展。</small></p>
+			<p><small>iPhone / iPad：Safari 分享 → 添加到主屏幕。请保留本站数据，清除网站数据会移除本地游戏和存档。</small></p>
+			<p><small id="lobby"></small></p>
+		</main>
+		<script type="module" src="/pwa/launcher.js"></script>
+	</body>
+</html>
