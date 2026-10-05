@@ -40,7 +40,7 @@ export default {
 		if (shell.has(url.pathname)) {
 			const asset = await env.ASSETS.fetch(request);
 			const headers = new Headers(asset.headers);
-			headers.set("Cache-Control", "no-cache");
+			headers.set("Cache-Control", "no-cache, no-transform");
 			if (url.pathname === "/service-worker.js") {
 				headers.set("Content-Type", "text/javascript");
 				headers.set("Service-Worker-Allowed", "/");

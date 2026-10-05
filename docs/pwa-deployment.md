@@ -33,6 +33,8 @@ sudo bash /home/fengxuwen/noname/scripts/pwa/prepare-credentials.sh
 
 ## 本机正式发布
 
+本次按用户最新要求跳过额外内容完整性校验，使用 `NONAME_PWA_VERIFY=0 pnpm build:pwa` 和 `pnpm pwa:publish -- --no-verify`。保留文件哈希用于差异更新，保留发布目标限制、维护状态和并发所有权检查。
+
 先在 `my-features` 提交源码，再构建以记录实际提交 SHA。普通修改只改源码，不手工修改 `dist/`，不维护 `lan-ai-server/public/`。
 
 ```bash
